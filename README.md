@@ -32,14 +32,14 @@ product scope.
 | Metric | Value |
 |---|---|
 | Accuracy | 88.4% |
-| Precision | 87.5% |
+| Precision | 88.0% |
 | Recall (default class) | 54.6% |
-| F1 | 66.6% |
+| F1 | 67.4% |
 | ROC AUC | 0.869 |
 | PR AUC | 0.774 |
 | Brier score | 0.092 |
 | Default recall | 54.6% |
-| Confusion matrix (TN/FP/FN/TP) | 4,968 / 124 / 620 / 771 |
+| Confusion matrix (TN/FP/FN/TP) | 4,959 / 106 / 644 / 774 |
 | Base rate | 21.8% of applicants default |
 
 **Read this correctly:** 78% of applicants repay, so accuracy alone is weak
@@ -48,6 +48,14 @@ a risk screener are **default recall (how many defaults are caught)**,
 **PR-AUC (ranking quality under class imbalance)** and the **Brier score
 (probability calibration)**. Precision/recall trade-off is set at the default
 0.5 threshold and was not tuned.
+
+**On calibration:** RandomForest probabilities are **not calibrated
+probabilities** — `predict_proba` returns a vote share across trees, not a
+frequency of default. The Brier score is *consistent with* imperfect
+calibration but does not by itself prove it (it also penalises
+misclassification); a reliability curve would be needed to characterise
+miscalibration properly. No calibration step (Platt scaling / isotonic
+regression) has been applied in this release.
 
 Training and inference share one fitted sklearn `Pipeline` (median imputation +
 one-hot encoding + RandomForest), so the preprocessing applied to an applicant
@@ -59,14 +67,15 @@ imputers and the encoder see training data only.
 
 RiskPulse produces **three distinct things**, which should not be confused:
 
-1. **Model probability of default** — the RandomForest's calibrated-ish
-   estimate, clipped to the 2%–98% range. This is the only statistically
-   evaluated quantity (the metrics table above).
-2. **Blended risk score** — a *policy overlay*: `0.40 × model + 0.40 × LTI risk
-   + 0.20 × prior default`. It intentionally re-weights affordability and
-   credit history, even though both also enter the model, to make policy
-   emphasis explicit and auditable. **It is not a model output, and none of the
-   evaluation metrics apply to it.**
+1. **Model probability of default** — the RandomForest's raw output, clipped
+   to the 2%–98% range. It is **not a calibrated probability** (see the note on
+   calibration above). This is the only statistically evaluated quantity (the
+   metrics table above).
+2. **Blended risk score** — an **illustrative, manually weighted policy
+   overlay**: `0.40 × model + 0.40 × LTI risk + 0.20 × prior default`. It
+   intentionally re-weights affordability and credit history, even though both
+   also enter the model, so it double-counts those factors. **It is not a model
+   output, and none of the evaluation metrics apply to it.**
 3. **Recommendation** — a deterministic mapping from the blended score to
    Approve / Manual review / Decline.
 
@@ -82,6 +91,17 @@ The 40/40/20 weights and the 15%/35% bands are **documented policy choices, not
 statistically optimised thresholds**. They were not tuned against any loss
 function. Changing them changes the product's behaviour; treating them as
 empirically derived would be incorrect.
+
+**Why not just use the model probability?** On the hold-out test set, applying
+the same 15%/35% bands directly to the model probability would approve 58% of
+applicants and catch 82% of defaults, while this overlay approves fewer
+applicants and catches **92% of defaults** — at the cost of flagging roughly
+twice as many applicants who would have repaid (2,971 false flags vs. 1,540).
+Neither scheme is objectively correct; the choice is a business trade-off
+between missed defaults and reviewer workload. The overlay was chosen because
+it makes that trade-off explicit and tunable, but **it has not been validated
+against any cost model and a production deployment should choose a threshold
+from a measured cost/benefit curve, not from these numbers.**
 
 ## Project structure
 

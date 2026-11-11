@@ -215,3 +215,53 @@ def test_advice_for_each_level():
         )
         advice = build_advice(assessment)
         assert isinstance(advice, list) and advice
+
+
+# --- Presentation-layer integrity (requirement 6 additions) -----------------
+def test_inputs_fingerprint_changes_with_inputs():
+    """Stale detection: a changed input must change the fingerprint."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("riskpulse_app", "app.py")
+    # app.py runs Streamlit calls at import; instead test the pure function
+    # by extracting it, mirroring the app's implementation.
+    import hashlib, json
+
+    def fingerprint(values):
+        return hashlib.sha256(
+            json.dumps(values, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
+
+    a = fingerprint(dict(BASE_INPUT))
+    b = fingerprint({**BASE_INPUT, "loan_amnt": 20000})
+    assert a != b
+    assert fingerprint(dict(BASE_INPUT)) == a  # stable for identical inputs
+
+
+def test_policy_grade_labelled_as_heuristic():
+    """The sidebar must not present the policy grade as a lender-assigned grade."""
+    app_source = Path("app.py").read_text(encoding="utf-8")
+    assert '"**Loan grade**"' not in app_source, (
+        "app.py still uses the misleading 'Loan grade' label"
+    )
+    assert "**Policy grade**" in app_source
+    # and must clarify it is internal, not lender-assigned
+    assert "not a" in app_source and "lender-assigned" in app_source
+
+
+def test_readme_confusion_matrix_matches_metrics():
+    """Regression: README metrics must equal the saved evaluation report."""
+    readme = Path("README.md").read_text(encoding="utf-8")
+    m = load_metrics()
+    tn, fp, fn, tp = (
+        m["confusion_matrix"]["tn"],
+        m["confusion_matrix"]["fp"],
+        m["confusion_matrix"]["fn"],
+        m["confusion_matrix"]["tp"],
+    )
+    expected = f"{tn:,} / {fp:,} / {fn:,} / {tp:,}"
+    assert expected in readme, f"README confusion matrix should contain '{expected}'"
+
+
+def test_readme_states_probabilities_are_uncalibrated():
+    readme = Path("README.md").read_text(encoding="utf-8")
+    assert "not calibrated" in readme

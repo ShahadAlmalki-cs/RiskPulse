@@ -7,8 +7,8 @@ Run from the project root:
 Layout
 ------
 Top bar          "RiskPulse Dashboard" + policy indicator
-Metric row       Blended risk score · Model default probability · Model
-                 confidence · Loan-to-income (colored by risk level)
+Metric row       Blended risk score · Model default probability · Model margin
+                 · Loan-to-income (colored by risk level)
 Analytics row    Score contribution by factor | Decision card
 History row      Recent assessments (this session) | Model benchmark
 
@@ -19,6 +19,8 @@ purely presentation.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import datetime
 
 import pandas as pd
@@ -57,6 +59,8 @@ LEVEL_STYLE = {
 # ECharts bar colors matched to the brand palette.
 SIGNAL_COLORS = ["#0E7C86", "#1D4ED8", "#7C3AED"]
 HISTORY_SESSION_KEY = "assessment_history"
+ASSESSMENT_SESSION_KEY = "assessment"
+INPUTS_SESSION_KEY = "assessment_inputs"
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +133,24 @@ def history_frame() -> pd.DataFrame:
     return pd.DataFrame(history)
 
 
+def inputs_fingerprint(values: dict[str, object]) -> str:
+    """Stable fingerprint of the current applicant inputs.
+
+    Used to detect when the sidebar has changed since the last assessment so a
+    stale result can be flagged instead of silently displayed.
+    """
+    return hashlib.sha256(
+        json.dumps(values, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+
+
+def assessment_is_stale(values: dict[str, object]) -> bool:
+    """True when the sidebar inputs no longer match the stored assessment."""
+    if ASSESSMENT_SESSION_KEY not in st.session_state:
+        return False
+    return st.session_state.get(INPUTS_SESSION_KEY) != inputs_fingerprint(values)
+
+
 # ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
@@ -195,12 +217,16 @@ def render_sidebar() -> tuple[dict[str, object], str]:
         prepared = with_policy_fields(values)
         st.divider()
         with st.container(horizontal=True):
-            st.markdown("**Loan grade**")
+            st.markdown("**Policy grade**")
             st.badge(
                 f"Grade {prepared['loan_grade']}",
                 icon=":material/verified:",
                 color="blue",
             )
+        st.caption(
+            "Internal heuristic from this app's policy logic — not a "
+            "lender-assigned credit grade."
+        )
         st.caption(
             f"LTI {float(prepared['loan_percent_income']):.1%} · derived "
             "automatically from the inputs."
@@ -213,11 +239,6 @@ def render_sidebar() -> tuple[dict[str, object], str]:
 # ---------------------------------------------------------------------------
 # Top metric cards
 # ---------------------------------------------------------------------------
-def _sparkline(score: float) -> list[float]:
-    """Tiny trend shape for the score card."""
-    return [0.0, score * 0.35, score * 0.7, score * 0.95, score]
-
-
 def render_metric_cards(assessment: RiskAssessment) -> None:
     """Four top cards, each colored by the applicant's risk level."""
     style = LEVEL_STYLE[assessment.level]
@@ -230,9 +251,10 @@ def render_metric_cards(assessment: RiskAssessment) -> None:
             delta=f"{assessment.level} risk",
             delta_color="off",
             border=True,
-            chart_data=_sparkline(assessment.score),
-            chart_type="area",
-            help="Weighted blend of the model, LTI and history signals.",
+            help="Illustrative, manually weighted policy overlay: 40% model + "
+                 "40% LTI + 20% prior default. It double-counts affordability "
+                 "and credit history, which the model already encodes. Not a "
+                 "model output and not statistically optimised.",
         )
         st.metric(
             "Model default probability (clipped)",
@@ -437,7 +459,8 @@ def render_history() -> None:
                 disabled=not st.session_state.get(HISTORY_SESSION_KEY),
             ):
                 st.session_state[HISTORY_SESSION_KEY] = []
-                st.session_state.pop("assessment", None)
+                st.session_state.pop(ASSESSMENT_SESSION_KEY, None)
+                st.session_state.pop(INPUTS_SESSION_KEY, None)
                 st.rerun()
 
         frame = history_frame()
@@ -652,10 +675,12 @@ if st.button(
     help="Scores the current sidebar inputs and adds them to the session history.",
 ):
     current = assess(pipeline, values, customer_label)
-    st.session_state["assessment"] = current
+    st.session_state[ASSESSMENT_SESSION_KEY] = current
+    st.session_state[INPUTS_SESSION_KEY] = inputs_fingerprint(values)
     record_assessment(customer_label, values, current)
 
-assessment: RiskAssessment | None = st.session_state.get("assessment")
+assessment: RiskAssessment | None = st.session_state.get(ASSESSMENT_SESSION_KEY)
+stale = assessment_is_stale(values)
 
 if assessment is None:
     st.info(
@@ -667,6 +692,14 @@ if assessment is None:
     st.subheader("Recent assessments")
     render_history()
     st.stop()
+
+if stale:
+    st.warning(
+        "Inputs have changed since this assessment was run. The figures below "
+        "describe the **previous** inputs — press **Run assessment** to refresh.",
+        title="Outdated assessment",
+        icon=":material/history:",
+    )
 
 # Metric cards -------------------------------------------------------------
 render_metric_cards(assessment)
