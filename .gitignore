@@ -1,0 +1,42 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# --- Virtual environments ---
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# --- Secrets & local config ---
+.streamlit/secrets.toml
+.env
+.env.*
+
+# --- Notebooks / tooling ---
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ty_cache/
+
+# --- Editors & OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Generated artifacts (keep models/ tracked intentionally) ---
+# models/ is committed so the app runs without retraining.
+# Uncomment the next line if you prefer to ship only code:
+# models/*.pkl

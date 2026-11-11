@@ -1,0 +1,8 @@
+# RiskPulse runtime dependencies
+# Install with: pip install -r requirements.txt
+
+streamlit>=1.67.0   # dashboard UI, KPI cards, ECharts charts
+pandas>=2.2.0       # data preparation and tables
+numpy>=1.26.0       # numeric helpers
+scikit-learn>=1.4.0 # RandomForest classifier and StandardScaler
+joblib>=1.3.0       # model and scaler persistence

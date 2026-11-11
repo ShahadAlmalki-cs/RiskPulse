@@ -1,0 +1,125 @@
+# RiskPulse dashboard theme
+# Dense KPI layout with compact padding; the settings light/dark toggle stays available.
+
+[theme]
+showWidgetBorder = true
+showSidebarBorder = true
+baseRadius = "6px"
+buttonRadius = "6px"
+font = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+headingFont = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@600;700&display=swap"
+codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+baseFontSize = 14
+baseFontWeight = 400
+codeFontSize = "13px"
+headingFontSizes = ["28px", "22px", "18px", "16px", "14px", "12px"]
+headingFontWeights = [700, 600, 600, 600, 500, 500]
+linkUnderline = false
+paddingTop = "0.5rem"
+paddingBottom = "3rem"
+
+[theme.light]
+primaryColor = "#0E7C86"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F1F5F9"
+codeBackgroundColor = "#F1F5F9"
+textColor = "#0F172A"
+linkColor = "#0E7C86"
+borderColor = "#CBD5E1"
+codeTextColor = "#334155"
+greenColor = "#059669"
+redColor = "#DC2626"
+yellowColor = "#D97706"
+orangeColor = "#EA580C"
+blueColor = "#1D4ED8"
+violetColor = "#7C3AED"
+grayColor = "#64748B"
+chartCategoricalColors = [
+    "#0E7C86",
+    "#1D4ED8",
+    "#D97706",
+    "#7C3AED",
+    "#DC2626",
+    "#059669",
+    "#0284C7",
+    "#EA580C",
+]
+chartSequentialColors = [
+    "#F0FDFA",
+    "#CCFBF1",
+    "#99F6E4",
+    "#5EEAD4",
+    "#2DD4BF",
+    "#14B8A6",
+    "#0D9488",
+    "#0F766E",
+    "#115E59",
+    "#134E4A",
+]
+dataframeBorderColor = "#CBD5E1"
+dataframeHeaderBackgroundColor = "#E2E8F0"
+dataframeHeaderTextColor = "#0F172A"
+
+[theme.dark]
+primaryColor = "#2DD4BF"
+backgroundColor = "#0B1220"
+secondaryBackgroundColor = "#111C2E"
+codeBackgroundColor = "#111C2E"
+textColor = "#E2E8F0"
+linkColor = "#5EEAD4"
+borderColor = "#1E293B"
+codeTextColor = "#CBD5E1"
+greenColor = "#34D399"
+redColor = "#F87171"
+yellowColor = "#FBBF24"
+orangeColor = "#FB923C"
+blueColor = "#60A5FA"
+violetColor = "#A78BFA"
+grayColor = "#94A3B8"
+chartCategoricalColors = [
+    "#2DD4BF",
+    "#60A5FA",
+    "#FBBF24",
+    "#A78BFA",
+    "#F87171",
+    "#34D399",
+    "#38BDF8",
+    "#FB923C",
+]
+chartSequentialColors = [
+    "#134E4A",
+    "#115E59",
+    "#0F766E",
+    "#0D9488",
+    "#14B8A6",
+    "#2DD4BF",
+    "#5EEAD4",
+    "#99F6E4",
+    "#CCFBF1",
+    "#F0FDFA",
+]
+dataframeBorderColor = "#1E293B"
+dataframeHeaderBackgroundColor = "#111C2E"
+dataframeHeaderTextColor = "#E2E8F0"
+
+[theme.sidebar]
+paddingTop = "0.5rem"
+paddingBottom = "1.5rem"
+
+[theme.light.sidebar]
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F1F5F9"
+codeBackgroundColor = "#E2E8F0"
+textColor = "#0F172A"
+borderColor = "#CBD5E1"
+primaryColor = "#0E7C86"
+linkColor = "#0E7C86"
+
+[theme.dark.sidebar]
+backgroundColor = "#050B16"
+secondaryBackgroundColor = "#111C2E"
+codeBackgroundColor = "#111C2E"
+textColor = "#E2E8F0"
+borderColor = "#1E293B"
+primaryColor = "#2DD4BF"
+linkColor = "#5EEAD4"
