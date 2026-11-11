@@ -1,0 +1,73 @@
+{
+  "feature_set": "C (pre-pricing, pre-approval)",
+  "raw_input_columns": [
+    "person_age",
+    "person_income",
+    "person_home_ownership",
+    "person_emp_length",
+    "loan_intent",
+    "loan_amnt",
+    "loan_percent_income",
+    "cb_person_default_on_file",
+    "cb_person_cred_hist_length"
+  ],
+  "numeric": [
+    "person_age",
+    "person_income",
+    "person_emp_length",
+    "loan_amnt",
+    "loan_percent_income",
+    "cb_person_cred_hist_length"
+  ],
+  "categorical": {
+    "person_home_ownership": [
+      "RENT",
+      "MORTGAGE",
+      "OWN",
+      "OTHER"
+    ],
+    "loan_intent": [
+      "PERSONAL",
+      "EDUCATION",
+      "MEDICAL",
+      "VENTURE",
+      "HOMEIMPROVEMENT",
+      "DEBTCONSOLIDATION"
+    ],
+    "cb_person_default_on_file": [
+      "N",
+      "Y"
+    ]
+  },
+  "encoded_feature_names": [
+    "person_age",
+    "person_income",
+    "person_emp_length",
+    "loan_amnt",
+    "loan_percent_income",
+    "cb_person_cred_hist_length",
+    "person_home_ownership_RENT",
+    "person_home_ownership_MORTGAGE",
+    "person_home_ownership_OWN",
+    "person_home_ownership_OTHER",
+    "loan_intent_PERSONAL",
+    "loan_intent_EDUCATION",
+    "loan_intent_MEDICAL",
+    "loan_intent_VENTURE",
+    "loan_intent_HOMEIMPROVEMENT",
+    "loan_intent_DEBTCONSOLIDATION",
+    "cb_person_default_on_file_N",
+    "cb_person_default_on_file_Y"
+  ],
+  "n_encoded_features": 18,
+  "target": "loan_status",
+  "excluded": {
+    "loan_grade": "post-decision pricing label; not available at application",
+    "loan_int_rate": "set by the lender at pricing; not available pre-approval"
+  },
+  "missing_value_policy": {
+    "numeric": "median imputation (fitted on train only)",
+    "categorical": "most_frequent imputation (fitted on train only)"
+  },
+  "sklearn_version": "1.9.1"
+}

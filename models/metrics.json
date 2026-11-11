@@ -1,64 +1,77 @@
 {
-  "accuracy": 0.9346,
-  "roc_auc": 0.9287,
-  "n_train": 26060,
-  "n_test": 6516,
-  "train_default_rate": 0.2182,
-  "features": [
+  "feature_set": "C (pre-pricing, pre-approval)",
+  "accuracy": 0.8843,
+  "precision": 0.8795,
+  "recall": 0.5458,
+  "f1": 0.6736,
+  "roc_auc": 0.8687,
+  "pr_auc": 0.7738,
+  "brier": 0.0918,
+  "default_recall": 0.5458,
+  "confusion_matrix": {
+    "tn": 4959,
+    "fp": 106,
+    "fn": 644,
+    "tp": 774
+  },
+  "n_train": 25928,
+  "n_test": 6483,
+  "test_default_rate": 0.2187,
+  "per_class": {
+    "0": {
+      "precision": 0.8851,
+      "recall": 0.9791,
+      "f1_score": 0.9297,
+      "support": 5065
+    },
+    "1": {
+      "precision": 0.8795,
+      "recall": 0.5458,
+      "f1_score": 0.6736,
+      "support": 1418
+    }
+  },
+  "train_default_rate": 0.2187,
+  "feature_names": [
+    "person_age",
+    "person_income",
+    "person_home_ownership",
+    "person_emp_length",
+    "loan_intent",
+    "loan_amnt",
+    "loan_percent_income",
+    "cb_person_default_on_file",
+    "cb_person_cred_hist_length"
+  ],
+  "encoded_feature_names": [
     "person_age",
     "person_income",
     "person_emp_length",
     "loan_amnt",
-    "loan_int_rate",
     "loan_percent_income",
     "cb_person_cred_hist_length",
-    "person_home_ownership_MORTGAGE",
-    "person_home_ownership_OTHER",
-    "person_home_ownership_OWN",
     "person_home_ownership_RENT",
-    "loan_intent_DEBTCONSOLIDATION",
-    "loan_intent_EDUCATION",
-    "loan_intent_HOMEIMPROVEMENT",
-    "loan_intent_MEDICAL",
+    "person_home_ownership_MORTGAGE",
+    "person_home_ownership_OWN",
+    "person_home_ownership_OTHER",
     "loan_intent_PERSONAL",
+    "loan_intent_EDUCATION",
+    "loan_intent_MEDICAL",
     "loan_intent_VENTURE",
-    "loan_grade_A",
-    "loan_grade_B",
-    "loan_grade_C",
-    "loan_grade_D",
-    "loan_grade_E",
-    "loan_grade_F",
-    "loan_grade_G",
+    "loan_intent_HOMEIMPROVEMENT",
+    "loan_intent_DEBTCONSOLIDATION",
     "cb_person_default_on_file_N",
     "cb_person_default_on_file_Y"
   ],
-  "classes": [
-    "0",
-    "1"
-  ],
-  "default_class_index": 1,
-  "per_class": {
-    "0": {
-      "precision": 0.9273,
-      "recall": 0.9943,
-      "f1_score": 0.9596,
-      "support": 5094
-    },
-    "1": {
-      "precision": 0.9725,
-      "recall": 0.7208,
-      "f1_score": 0.8279,
-      "support": 1422
-    }
+  "excluded_features": {
+    "loan_grade": "post-decision pricing label; not available at application",
+    "loan_int_rate": "set by the lender at pricing; not available pre-approval"
   },
-  "confusion_matrix": [
-    [
-      5065,
-      29
-    ],
-    [
-      397,
-      1025
-    ]
-  ]
+  "missing_value_policy": {
+    "numeric": "median imputation (fitted on train only)",
+    "categorical": "most_frequent imputation (fitted on train only)"
+  },
+  "sklearn_version": "1.9.1",
+  "python_version": "3.12.10",
+  "random_state": 42
 }

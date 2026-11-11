@@ -69,7 +69,12 @@ def correct_model_probability(model_probability: float) -> float:
 
 
 def calculate_model_confidence(default_probability: float) -> float:
-    """Measure model certainty as the gap between its two class probabilities."""
+    """Separation between the model's two class probabilities: |2p - 1|.
+
+    This is a monotone transform of the probability itself, NOT an independent
+    uncertainty measure. It is displayed as "model margin" so it is not
+    mistaken for confidence about the direction of the decision.
+    """
     return abs(default_probability - (1.0 - default_probability))
 
 
@@ -88,6 +93,13 @@ def history_risk(previous_default: str) -> float:
 
 
 # --- Blending --------------------------------------------------------------
+# The blended score is a POLICY OVERLAY, not a model output: it re-weights the
+# model probability with explicit LTI and prior-default signals. Both of those
+# already enter the model as features, so the blend intentionally double-counts
+# affordability and credit history — it exists to make the policy emphasis
+# transparent and auditable, not because it adds statistical information.
+# The 15%/35% decision bands are policy choices, not optimised thresholds.
+# See README "Decision policy" for the documented limitations.
 @dataclass(frozen=True)
 class Contribution:
     """One weighted risk signal inside the blended score."""
@@ -144,16 +156,7 @@ def blend_signals(
     ]
 
 
-def calculate_blended_risk(
-    model_probability: float,
-    loan_to_income: float,
-    previous_default: str,
-) -> float:
-    """Blend the model, loan-to-income and history signals into one score."""
-    score = sum(item.points for item in blend_signals(
-        model_probability, loan_to_income, previous_default
-    ))
-    return max(0.0, min(1.0, score))
+
 
 
 def classify_risk(score: float) -> str:

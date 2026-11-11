@@ -27,11 +27,11 @@ import streamlit as st
 from src import config
 from src.artifacts import (
     load_metrics,
-    load_model,
+    load_pipeline,
     load_reference_profiles,
     predict_default_probability,
 )
-from src.features import validate_inputs, with_derived_fields
+from src.features import validate_inputs, with_policy_fields
 from src.risk import (
     WEIGHTS,
     RiskAssessment,
@@ -63,8 +63,8 @@ HISTORY_SESSION_KEY = "assessment_history"
 # Cached artifacts
 # ---------------------------------------------------------------------------
 @st.cache_resource(show_spinner=False)
-def get_model():
-    return load_model()
+def get_pipeline():
+    return load_pipeline()
 
 
 @st.cache_data(show_spinner=False)
@@ -80,11 +80,11 @@ def get_reference_profiles() -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Scoring
 # ---------------------------------------------------------------------------
-def assess(model, values: dict[str, object], label: str = "Applicant") -> RiskAssessment:
+def assess(pipeline, values: dict[str, object], label: str = "Applicant") -> RiskAssessment:
     """Score one applicant and package every signal the dashboard needs."""
-    raw_probability = predict_default_probability(model, values)
+    raw_probability = predict_default_probability(pipeline, values)
     model_probability = correct_model_probability(raw_probability)
-    prepared = with_derived_fields(values)
+    prepared = with_policy_fields(values)
     loan_to_income = float(prepared["loan_percent_income"])
     return RiskAssessment(
         model_probability=model_probability,
@@ -92,7 +92,7 @@ def assess(model, values: dict[str, object], label: str = "Applicant") -> RiskAs
         model_confidence=calculate_model_confidence(model_probability),
         loan_to_income=loan_to_income,
         loan_grade=str(prepared["loan_grade"]),
-        loan_grade_reason="",
+        loan_grade_reason=str(prepared["loan_grade_reason"]),
         contributions=blend_signals(
             model_probability,
             loan_to_income,
@@ -179,9 +179,6 @@ def render_sidebar() -> tuple[dict[str, object], str]:
         loan_amnt = st.number_input(
             "Loan amount", min_value=500, max_value=1_000_000, value=10_000, step=500
         )
-        loan_int_rate = st.number_input(
-            "Interest rate (%)", min_value=0.0, max_value=100.0, value=12.0, step=0.1
-        )
         loan_intent = st.selectbox("Loan purpose", config.LOAN_INTENT_OPTIONS)
 
         values: dict[str, object] = {
@@ -192,11 +189,10 @@ def render_sidebar() -> tuple[dict[str, object], str]:
             "cb_person_cred_hist_length": cb_person_cred_hist_length,
             "cb_person_default_on_file": cb_person_default_on_file,
             "loan_amnt": loan_amnt,
-            "loan_int_rate": loan_int_rate,
             "loan_intent": loan_intent,
         }
 
-        prepared = with_derived_fields(values)
+        prepared = with_policy_fields(values)
         st.divider()
         with st.container(horizontal=True):
             st.markdown("**Loan grade**")
@@ -247,7 +243,7 @@ def render_metric_cards(assessment: RiskAssessment) -> None:
             help="Model output bounded to the 2%–98% guardrail.",
         )
         st.metric(
-            "Model confidence",
+            "Model margin",
             f"{assessment.model_confidence:.0%}",
             border=True,
             help="Gap between the model's default and non-default probabilities.",
@@ -411,7 +407,6 @@ def render_applicant_summary(
         summary = {
             "Annual income": f"${float(values['person_income']):,.0f}",
             "Loan amount": f"${float(values['loan_amnt']):,.0f}",
-            "Interest rate": f"{float(values['loan_int_rate']):.1f}%",
             "Employment": f"{float(values['person_emp_length']):g} yrs",
             "Credit history": f"{int(values['cb_person_cred_hist_length'])} yrs",
             "Home": str(values["person_home_ownership"]),
@@ -488,9 +483,19 @@ def render_benchmark(assessment: RiskAssessment, metrics: dict) -> None:
 
         # Equal columns keep the three benchmark cards on a single row.
         accuracy_column, auc_column, rows_column = st.columns(3)
-        accuracy_column.metric("Accuracy", f"{metrics['accuracy']:.1%}", border=True)
-        auc_column.metric("ROC AUC", f"{metrics['roc_auc']:.3f}", border=True)
-        rows_column.metric("Training rows", f"{metrics['n_train']:,}", border=True)
+        accuracy_column.metric("Accuracy", f"{metrics['accuracy']:.1%}", border=True,
+            help="Share of correct classifications. Not evidence of quality on its own: "
+                 "78% of applicants repay, so a majority-guesser already reaches that.")
+        auc_column.metric("ROC AUC", f"{metrics['roc_auc']:.3f}", border=True,
+            help="Ranking quality across all thresholds.")
+        rows_column.metric("Default recall", f"{metrics['default_recall']:.1%}", border=True,
+            help="Share of actual defaults the model flags. The business-critical metric "
+                 "for a risk screener.")
+        st.caption(
+            f"PR-AUC {metrics['pr_auc']:.3f} · Brier {metrics['brier']:.3f} · "
+            f"precision {metrics['precision']:.1%} · F1 {metrics['f1']:.1%} · "
+            f"trained on {metrics['n_train']:,} applicants"
+        )
 
         comparison = pd.DataFrame(
             {
@@ -518,7 +523,7 @@ def render_portfolio(reference: pd.DataFrame, assessment: RiskAssessment) -> Non
             st.info(
                 "Reference profiles unavailable. Run "
                 "`python notebooks/clean_data.py` to rebuild "
-                "`data/clean_credit_risk.csv`."
+                "`data/reference_profiles.csv`."
             )
             return
 
@@ -609,10 +614,10 @@ def render_methodology(metrics: dict) -> None:
 # Page
 # ---------------------------------------------------------------------------
 try:
-    model = get_model()
+    pipeline = get_pipeline()
 except FileNotFoundError:
     st.error(
-        "Run `python train_model.py` first to create `models/risk_model.pkl`.",
+        "Run `python train_model.py` first to create `models/risk_pipeline.pkl`.",
         title="Model not found",
         icon=":material/error:",
     )
@@ -646,7 +651,7 @@ if st.button(
     width="stretch",
     help="Scores the current sidebar inputs and adds them to the session history.",
 ):
-    current = assess(model, values, customer_label)
+    current = assess(pipeline, values, customer_label)
     st.session_state["assessment"] = current
     record_assessment(customer_label, values, current)
 
@@ -700,7 +705,7 @@ with st.container(horizontal=True):
         st.markdown(
             f"**Raw model probability:** {assessment.raw_model_probability:.2%}  \n"
             f"**Clipped probability:** {assessment.model_probability:.2%}  \n"
-            f"**Model confidence:** {assessment.model_confidence:.1%}  \n"
+            f"**Model margin (|2p-1|):** {assessment.model_confidence:.1%}  \n"
             f"**Loan grade:** {assessment.loan_grade}"
         )
         for item in assessment.contributions:

@@ -1,12 +1,14 @@
-"""Turn raw applicant inputs into a model-ready feature row.
+"""Validate applicant inputs and build a Set C model-ready row.
 
-The training data was one-hot encoded with ``pd.get_dummies``, so the model
-expects every possible category as its own 0/1 column. This module rebuilds
-that exact schema from the user's choices and validates the input first.
+The model expects the nine raw application-time columns listed in
+``config.MODEL_NUMERIC_FEATURES`` / ``MODEL_CATEGORICAL_FEATURES``; all
+imputation and encoding is done by the fitted pipeline, so this module only
+validates and assembles the raw frame.
 """
 
 from __future__ import annotations
 
+import math
 from typing import Mapping
 
 import pandas as pd
@@ -14,27 +16,13 @@ import pandas as pd
 from src import config
 from src.risk import calculate_loan_percent_income, determine_loan_grade
 
-NUMERIC_FEATURES = (
-    "person_age",
-    "person_income",
-    "person_emp_length",
-    "loan_amnt",
-    "loan_int_rate",
-    "cb_person_cred_hist_length",
-)
+# The exact raw columns the pipeline was trained on (Set C).
+RAW_MODEL_COLUMNS = (*config.MODEL_NUMERIC_FEATURES, *config.MODEL_CATEGORICAL_FEATURES)
 
-CATEGORICAL_FEATURES = (
-    "person_home_ownership",
-    "loan_intent",
-    "loan_grade",
-    "cb_person_default_on_file",
-)
-
-# ``loan_grade`` is not required: it is a policy output derived in
-# ``with_derived_fields``, never entered by the user.
+# Fields a caller must supply; loan_percent_income is derived, not entered.
 REQUIRED_FIELDS = (
-    *NUMERIC_FEATURES,
-    *[feature for feature in CATEGORICAL_FEATURES if feature != "loan_grade"],
+    *config.RAW_INPUT_NUMERIC_FIELDS,
+    *config.RAW_INPUT_CATEGORICAL_FIELDS,
 )
 
 INPUT_LABELS = {
@@ -45,70 +33,102 @@ INPUT_LABELS = {
     "cb_person_cred_hist_length": "Credit history length (years)",
     "cb_person_default_on_file": "Previous default on record",
     "loan_amnt": "Loan amount",
-    "loan_int_rate": "Interest rate (%)",
     "loan_intent": "Loan purpose",
 }
 
 
+def _as_finite_float(value: object, field: str) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{INPUT_LABELS[field]} must be a number.") from exc
+    if not math.isfinite(number):
+        raise ValueError(f"{INPUT_LABELS[field]} must be a finite number.")
+    return number
+
+
 def validate_inputs(values: Mapping[str, object]) -> None:
-    """Raise ``ValueError`` when a field is missing or out of a sane range."""
+    """Raise ``ValueError`` when a field is missing, malformed or impossible."""
     missing = [field for field in REQUIRED_FIELDS if field not in values]
     if missing:
         raise ValueError(f"Missing required inputs: {', '.join(missing)}")
 
-    if not 18 <= float(values["person_age"]) <= 100:
+    numeric = {
+        field: _as_finite_float(values[field], field)
+        for field in config.RAW_INPUT_NUMERIC_FIELDS
+    }
+
+    if not 18 <= numeric["person_age"] <= 100:
         raise ValueError("Age must be between 18 and 100.")
-    if float(values["person_income"]) <= 0:
+    if numeric["person_income"] <= 0:
         raise ValueError("Annual income must be greater than zero.")
-    if float(values["loan_amnt"]) < 0:
-        raise ValueError("Loan amount cannot be negative.")
-    if not 0.0 <= float(values["loan_int_rate"]) <= 100.0:
-        raise ValueError("Interest rate must be between 0 and 100.")
-    if float(values["person_emp_length"]) < 0:
+    if numeric["loan_amnt"] <= 0:
+        raise ValueError("Loan amount must be greater than zero.")
+    if numeric["person_emp_length"] < 0:
         raise ValueError("Employment length cannot be negative.")
-    if int(values["cb_person_cred_hist_length"]) < 0:
+    if numeric["cb_person_cred_hist_length"] < 0:
         raise ValueError("Credit history length cannot be negative.")
+    if numeric["person_emp_length"] > numeric["person_age"]:
+        raise ValueError("Employment length cannot exceed age.")
+    if numeric["cb_person_cred_hist_length"] > numeric["person_age"]:
+        raise ValueError("Credit history length cannot exceed age.")
 
     allowed = {
         "person_home_ownership": config.HOME_OWNERSHIP_OPTIONS,
         "loan_intent": config.LOAN_INTENT_OPTIONS,
         "cb_person_default_on_file": config.DEFAULT_ON_FILE_OPTIONS,
     }
-    # Accepted only when a caller supplies a pre-computed grade explicitly.
-    if "loan_grade" in values and values["loan_grade"] not in config.LOAN_GRADES:
-        raise ValueError(f"Loan grade must be one of {config.LOAN_GRADES}.")
     for field, options in allowed.items():
         if values[field] not in options:
-            raise ValueError(f"{INPUT_LABELS[field]} must be one of {options}.")
+            raise ValueError(
+                f"{INPUT_LABELS[field]} must be one of: {', '.join(options)}."
+            )
 
 
-def with_derived_fields(values: Mapping[str, object]) -> dict[str, object]:
-    """Add the policy loan grade and loan-to-income derived from the inputs."""
-    prepared = dict(values)
+def with_policy_fields(values: Mapping[str, object]) -> dict[str, object]:
+    """Add derived LTI and the *policy* loan grade (display only, never a model input)."""
+    supplied = tuple(c for c in RAW_MODEL_COLUMNS if c != "loan_percent_income")
+    prepared = {field: values[field] for field in supplied}
     loan_to_income = calculate_loan_percent_income(
         float(prepared["loan_amnt"]), float(prepared["person_income"])
     )
-    grade, _ = determine_loan_grade(
+    grade, reason = determine_loan_grade(
         loan_to_income, str(prepared["cb_person_default_on_file"])
     )
-    prepared["loan_grade"] = grade
     prepared["loan_percent_income"] = loan_to_income
+    prepared["loan_grade"] = grade
+    prepared["loan_grade_reason"] = reason
     return prepared
 
 
-def create_model_input(model, values: Mapping[str, object]) -> pd.DataFrame:
-    """Build a one-row frame matching the model's training schema."""
-    prepared = with_derived_fields(values)
+def build_model_frame(values: Mapping[str, object], schema: dict | None = None) -> pd.DataFrame:
+    """One-row raw frame in the exact trained column order."""
+    prepared = with_policy_fields(values)
+    columns = list(schema["raw_input_columns"]) if schema else list(RAW_MODEL_COLUMNS)
+    frame = pd.DataFrame(
+        [{column: prepared[column] for column in columns}],
+        columns=columns,
+    )
+    for field in config.MODEL_NUMERIC_FEATURES:
+        frame[field] = pd.to_numeric(frame[field], errors="coerce").astype(float)
+    for field in config.MODEL_CATEGORICAL_FEATURES:
+        frame[field] = frame[field].astype(object)
+    return frame
 
-    input_df = pd.DataFrame(0.0, index=[0], columns=model.feature_names_in_)
 
-    for feature in NUMERIC_FEATURES:
-        input_df.loc[0, feature] = float(prepared[feature])
-    input_df.loc[0, "loan_percent_income"] = float(prepared["loan_percent_income"])
+def load_schema(path=config.SCHEMA_PATH) -> dict:
+    """Load the persisted feature schema."""
+    import json
 
-    for feature in CATEGORICAL_FEATURES:
-        encoded_column = f"{feature}_{prepared[feature]}"
-        if encoded_column in input_df.columns:
-            input_df.loc[0, encoded_column] = 1
+    return json.loads(path.read_text(encoding="utf-8"))
 
-    return input_df
+
+def assert_schema_compatible(frame: pd.DataFrame, schema: dict) -> None:
+    """Fail loudly if the frame does not match the persisted training schema."""
+    expected = schema["raw_input_columns"]
+    actual = list(frame.columns)
+    if actual != expected:
+        raise ValueError(
+            "Model input schema mismatch. Expected columns "
+            f"{expected}, got {actual}."
+        )

@@ -7,22 +7,17 @@ scripts and tests; the app wraps them in ``st.cache_resource``/``st.cache_data``
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Mapping
 
 import joblib
 import pandas as pd
 
 from src import config
-from src.features import create_model_input
+from src.features import assert_schema_compatible, build_model_frame, load_schema
 
 
-def load_model(path=config.MODEL_PATH):
-    """Load the trained classifier."""
-    return joblib.load(path)
-
-
-def load_scaler(path=config.SCALER_PATH):
-    """Load the fitted feature scaler saved during training."""
+def load_pipeline(path=config.PIPELINE_PATH):
+    """Load the fitted preprocessing + classifier pipeline."""
     return joblib.load(path)
 
 
@@ -35,31 +30,33 @@ def load_metrics(path=config.METRICS_PATH) -> dict[str, Any]:
     return data
 
 
-def load_reference_profiles(path=config.CLEAN_DATASET_PATH) -> pd.DataFrame:
-    """Load the dataset behind the benchmark tab (no target column).
+def load_reference_profiles(path=config.REFERENCE_DATASET_PATH) -> pd.DataFrame:
+    """Load the deduplicated raw frame behind the portfolio view.
 
-    Returns an empty frame when the cleaned data is unavailable so the app can
-    still score individual applicants.
+    Returns an empty frame when the reference data is unavailable so the app
+    can still score individual applicants.
     """
     if not path.exists():
         return pd.DataFrame()
-    return pd.read_csv(path, usecols=lambda column: column != config.TARGET_COLUMN)
+    frame = pd.read_csv(path)
+    return frame.drop(columns=config.TARGET_COLUMN, errors="ignore")
 
 
-def default_probability_index(model) -> int:
+def default_class_index(pipeline) -> int:
     """Column of ``predict_proba`` that corresponds to the default class."""
-    return list(model.classes_).index(1)
+    classifier = pipeline.named_steps["model"]
+    return list(classifier.classes_).index(1)
 
 
-def predict_default_probability(model, values: dict[str, object]) -> float:
-    """Score one applicant and return the raw probability of default."""
-    model_input = create_model_input(model, values)
-    return float(model.predict_proba(model_input)[0][default_probability_index(model)])
+def predict_default_probability(pipeline, values: Mapping[str, object]) -> float:
+    """Score one applicant and return the probability of default.
 
-
-def scale_features(scaler, frame: pd.DataFrame) -> pd.DataFrame:
-    """Apply the training scaler without changing column names or order."""
-    if scaler is None or frame.empty:
-        return frame
-    scaled = scaler.transform(frame)
-    return pd.DataFrame(scaled, columns=frame.columns, index=frame.index)
+    Raises ``ValueError`` on unknown categories (the pipeline's encoder is
+    configured with ``handle_unknown="error"``) so callers can surface a clear
+    application error instead of a silent zero.
+    """
+    schema = load_schema()
+    frame = build_model_frame(values, schema=schema)
+    assert_schema_compatible(frame, schema)
+    proba = pipeline.predict_proba(frame)
+    return float(proba[0][default_class_index(pipeline)])

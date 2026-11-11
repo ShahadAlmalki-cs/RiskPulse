@@ -1,0 +1,64 @@
+{
+  "accuracy": 0.9346,
+  "roc_auc": 0.9287,
+  "n_train": 26060,
+  "n_test": 6516,
+  "train_default_rate": 0.2182,
+  "features": [
+    "person_age",
+    "person_income",
+    "person_emp_length",
+    "loan_amnt",
+    "loan_int_rate",
+    "loan_percent_income",
+    "cb_person_cred_hist_length",
+    "person_home_ownership_MORTGAGE",
+    "person_home_ownership_OTHER",
+    "person_home_ownership_OWN",
+    "person_home_ownership_RENT",
+    "loan_intent_DEBTCONSOLIDATION",
+    "loan_intent_EDUCATION",
+    "loan_intent_HOMEIMPROVEMENT",
+    "loan_intent_MEDICAL",
+    "loan_intent_PERSONAL",
+    "loan_intent_VENTURE",
+    "loan_grade_A",
+    "loan_grade_B",
+    "loan_grade_C",
+    "loan_grade_D",
+    "loan_grade_E",
+    "loan_grade_F",
+    "loan_grade_G",
+    "cb_person_default_on_file_N",
+    "cb_person_default_on_file_Y"
+  ],
+  "classes": [
+    "0",
+    "1"
+  ],
+  "default_class_index": 1,
+  "per_class": {
+    "0": {
+      "precision": 0.9273,
+      "recall": 0.9943,
+      "f1_score": 0.9596,
+      "support": 5094
+    },
+    "1": {
+      "precision": 0.9725,
+      "recall": 0.7208,
+      "f1_score": 0.8279,
+      "support": 1422
+    }
+  },
+  "confusion_matrix": [
+    [
+      5065,
+      29
+    ],
+    [
+      397,
+      1025
+    ]
+  ]
+}
