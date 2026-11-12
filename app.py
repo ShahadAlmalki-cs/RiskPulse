@@ -6,11 +6,12 @@ Run from the project root:
 
 Layout
 ------
-Top bar          "Dashboard" title + subtitle + model badge
-Metric row       Model default probability · Model margin · LTI · Blended score
-Analytics row    Risk score contribution (bar) | Decision card
+Sidebar          Applicant inputs (profile, loan request, policy grade preview)
+Top bar          Title, subtitle, model status badge
+Metric row       Blended risk score · Model default probability · Model margin · LTI
+Analytics row    Risk score breakdown | Decision card
 Summary row      Applicant summary | LTI position
-Bottom row       Recent assessments | Model performance
+Bottom row       Model performance | Recent assessments
 
 All risk math lives in ``src/risk.py``, feature preparation in
 ``src/features.py`` and artifact loading in ``src/artifacts.py``; this module is
@@ -50,37 +51,216 @@ st.set_page_config(
     layout="wide",
 )
 
-# Visual tokens per risk level, reused by every card, badge and alert.
+# ---------------------------------------------------------------------------
+# Design tokens
+# ---------------------------------------------------------------------------
+# One palette for both themes. Every card, badge and chart reads from here, so
+# the light and dark themes stay in sync and text always keeps a strong
+# contrast against its own surface.
 LEVEL_STYLE = {
-    "Low": {"color": "green", "icon": "check_circle", "alert": st.success},
-    "Medium": {"color": "orange", "icon": "warning", "alert": st.warning},
-    "High": {"color": "red", "icon": "cancel", "alert": st.error},
+    "Low": {
+        "color": "green",
+        "icon": "check_circle",
+        "alert": st.success,
+        "accent": "#1E9E6A",
+        "soft": "rgba(30, 158, 106, 0.12)",
+        "text": "#0F7A50",
+    },
+    "Medium": {
+        "color": "orange",
+        "icon": "warning",
+        "alert": st.warning,
+        "accent": "#D9930D",
+        "soft": "rgba(217, 147, 13, 0.14)",
+        "text": "#8A5A00",
+    },
+    "High": {
+        "color": "red",
+        "icon": "cancel",
+        "alert": st.error,
+        "accent": "#E15241",
+        "soft": "rgba(225, 82, 65, 0.14)",
+        "text": "#B02A1C",
+    },
 }
 
 # ECharts bar colors matched to the brand palette.
-SIGNAL_COLORS = ["#263045", "#9AB9E4", "#08142A"]
+SIGNAL_COLORS = ["#3569D4", "#7FB0F5", "#0B1528"]
+
 HISTORY_SESSION_KEY = "assessment_history"
 ASSESSMENT_SESSION_KEY = "assessment"
 INPUTS_SESSION_KEY = "assessment_inputs"
 
-# Custom card styling: white surface, soft shadow, generous padding. Applied
-# through st.markdown so the theme file stays the single source of color truth.
+# Card styling. Colors come from CSS variables that Streamlit exposes for the
+# active theme, so the same rules work in light and dark mode without a second
+# stylesheet. Text colors are always paired with their own surface color.
 CARD_CSS = """
 <style>
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        box-shadow: 0 1px 3px rgba(11, 21, 40, 0.05);
+    :root {
+        --rp-surface: var(--st-secondary-background-color, #FFFFFF);
+        --rp-canvas: var(--st-background-color, #F1F2FC);
+        --rp-text: var(--st-text-color, #0B1528);
+        --rp-muted: var(--st-gray-text-color, #5A6780);
+        --rp-border: var(--st-border-color, #E3E6F5);
+        --rp-primary: var(--st-primary-color, #3569D4);
+    }
+
+    /* Metric tiles: card surface, readable label, strong value. */
+    div[data-testid="stMetric"] {
+        background: var(--rp-surface);
+        border: 1px solid var(--rp-border);
+        border-radius: 14px;
+        padding: 14px 16px;
+        box-shadow: 0 1px 3px rgba(11, 21, 40, 0.06);
+    }
+    div[data-testid="stMetricLabel"],
+    div[data-testid="stMetricLabel"] p {
+        color: var(--rp-muted) !important;
+        font-weight: 600;
+        letter-spacing: 0.01em;
     }
     div[data-testid="stMetricValue"] {
+        color: var(--rp-text) !important;
         font-weight: 700;
         letter-spacing: -0.02em;
     }
-    /* tighter, more card-like metric tiles */
-    div[data-testid="stMetric"] {
-        background: #FFFFFF;
-        border: 1px solid #E3E6F5;
-        border-radius: 14px;
-        padding: 14px 16px;
-        box-shadow: 0 1px 3px rgba(11, 21, 40, 0.05);
+    div[data-testid="stMetricDelta"] {
+        color: var(--rp-muted) !important;
+    }
+
+    /* Bordered containers read as cards in both themes. */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        box-shadow: 0 1px 3px rgba(11, 21, 40, 0.06);
+    }
+
+    /* Captions and small print: never rely on a low-contrast gray. */
+    div[data-testid="stCaptionContainer"],
+    div[data-testid="stCaptionContainer"] p {
+        color: var(--rp-muted) !important;
+    }
+
+    /* Sidebar: slightly raised surface so inputs stand out from the canvas. */
+    section[data-testid="stSidebar"] div[data-testid="stVerticalBlockBorderWrapper"] {
+        background: var(--rp-surface);
+    }
+
+    /* Hero banner */
+    .rp-hero {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 18px 22px;
+        border-radius: 16px;
+        border: 1px solid var(--rp-border);
+        background: var(--rp-surface);
+        box-shadow: 0 1px 3px rgba(11, 21, 40, 0.06);
+    }
+    .rp-hero h1 {
+        margin: 0;
+        font-size: 26px;
+        line-height: 1.2;
+        color: var(--rp-text);
+    }
+    .rp-hero p {
+        margin: 4px 0 0 0;
+        font-size: 14px;
+        color: var(--rp-muted);
+    }
+    .rp-hero-badges {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .rp-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 12px;
+        border-radius: 999px;
+        font-size: 12.5px;
+        font-weight: 600;
+        border: 1px solid var(--rp-border);
+        background: var(--rp-canvas);
+        color: var(--rp-text);
+    }
+    .rp-pill--live {
+        border-color: rgba(30, 158, 106, 0.45);
+        background: rgba(30, 158, 106, 0.12);
+        color: #0F7A50;
+    }
+
+    /* Decision banner: the single most important element on the page. */
+    .rp-decision {
+        border-radius: 16px;
+        padding: 18px 20px;
+        border: 1px solid var(--rp-border);
+        border-left: 6px solid var(--rp-accent);
+        background: var(--rp-soft);
+    }
+    .rp-decision-label {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--rp-muted);
+    }
+    .rp-decision-value {
+        font-size: 30px;
+        font-weight: 800;
+        line-height: 1.15;
+        margin: 2px 0 4px 0;
+        color: var(--rp-accent-text);
+    }
+    .rp-decision-meta {
+        font-size: 13.5px;
+        color: var(--rp-text);
+    }
+
+    /* Score gauge strip */
+    .rp-gauge {
+        position: relative;
+        height: 10px;
+        border-radius: 999px;
+        background: linear-gradient(
+            90deg,
+            #1E9E6A 0%,
+            #1E9E6A 15%,
+            #D9930D 15%,
+            #D9930D 35%,
+            #E15241 35%,
+            #E15241 100%
+        );
+        margin: 10px 0 6px 0;
+    }
+    .rp-gauge-marker {
+        position: absolute;
+        top: -4px;
+        width: 4px;
+        height: 18px;
+        border-radius: 2px;
+        background: var(--rp-text);
+        box-shadow: 0 0 0 2px var(--rp-surface);
+        transform: translateX(-2px);
+    }
+    .rp-gauge-scale {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11.5px;
+        color: var(--rp-muted);
+    }
+
+    /* Key-value strip */
+    .rp-kv-label {
+        font-size: 12px;
+        color: var(--rp-muted);
+        margin-bottom: 2px;
+    }
+    .rp-kv-value {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--rp-text);
     }
 </style>
 """
@@ -190,7 +370,7 @@ def _parse_number(raw_text: str, label: str) -> float:
     Raises ``ValueError`` with a friendly message on unparseable input.
     """
     cleaned = raw_text.translate(_DIGIT_MAP).strip().replace(",", "").replace(" ", "")
-    cleaned = cleaned.replace("٫", ".").replace("٫", ".")  # Arabic decimal marks
+    cleaned = cleaned.replace("٫", ".").replace("٬", "")  # Arabic decimal / thousands marks
     try:
         number = float(cleaned)
     except ValueError as exc:
@@ -220,9 +400,7 @@ def render_sidebar() -> tuple[dict[str, object], str]:
         )
         # Numeric fields are plain text inputs so the browser always shows
         # Latin (English) digits, regardless of the operating-system locale.
-        person_age_text = st.text_input(
-            "Age", value="30", help="Years (18–100)."
-        )
+        person_age_text = st.text_input("Age", value="30", help="Years (18–100).")
         person_income_text = st.text_input(
             "Annual income",
             value="60000",
@@ -264,7 +442,7 @@ def render_sidebar() -> tuple[dict[str, object], str]:
 
         prepared = with_policy_fields(values)
         st.divider()
-        with st.container(horizontal=True):
+        with st.container(horizontal=True, vertical_alignment="center"):
             st.markdown("**Policy grade**")
             st.badge(
                 f"Grade {prepared['loan_grade']}",
@@ -285,15 +463,47 @@ def render_sidebar() -> tuple[dict[str, object], str]:
 
 
 # ---------------------------------------------------------------------------
+# Header
+# ---------------------------------------------------------------------------
+def render_header() -> None:
+    """Hero banner: product name, purpose and live-model status."""
+    st.markdown(
+        """
+        <div class="rp-hero">
+            <div>
+                <h1>RiskPulse Dashboard</h1>
+                <p>Pre-approval credit risk assessment — before pricing.</p>
+            </div>
+            <div class="rp-hero-badges">
+                <span class="rp-pill rp-pill--live">● Model live</span>
+                <span class="rp-pill">RandomForest · application-time features</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Top metric cards
 # ---------------------------------------------------------------------------
 def render_metric_cards(assessment: RiskAssessment) -> None:
-    """Four top cards. Order matches the reference: model first, policy last."""
+    """Four top cards: blended score first, then the model signals behind it."""
     style = LEVEL_STYLE[assessment.level]
 
     cards = [
         (
-            ":material/monitoring: Model Probability",
+            f":{style['color']}[:material/diamond: Blended Risk Score]",
+            f"{assessment.score:.1%}",
+            f"{assessment.level} risk · {assessment.decision}",
+            "Blended policy score — an illustrative, manually weighted "
+            "overlay: 40% model + 40% LTI + 20% prior default. It "
+            "double-counts affordability and credit history, which the "
+            "model already encodes. Not a model output and not "
+            "statistically optimised.",
+        ),
+        (
+            ":material/monitoring: Model Default Probability",
             f"{assessment.model_probability:.1%}",
             f"≈ {assessment.raw_model_probability:.1%} raw",
             "Model default probability, clipped to the 2%–98% guardrail. "
@@ -312,16 +522,6 @@ def render_metric_cards(assessment: RiskAssessment) -> None:
             "Loan / Income",
             "Loan amount divided by annual income. Drives both the model and "
             "the policy overlay.",
-        ),
-        (
-            f":{style['color']}[:material/diamond: Policy Score]",
-            f"{assessment.score:.1%}",
-            f"{assessment.level} risk",
-            "Blended policy score — an illustrative, manually weighted "
-            "overlay: 40% model + 40% LTI + 20% prior default. It "
-            "double-counts affordability and credit history, which the "
-            "model already encodes. Not a model output and not "
-            "statistically optimised.",
         ),
     ]
     columns = st.columns(4, gap="small")
@@ -345,11 +545,11 @@ def render_contribution_chart(assessment: RiskAssessment) -> None:
     ]
     frame = pd.DataFrame(rows).sort_values("Points", ascending=True)
 
-    with st.container(border=True, height=420):
-        col_header, col_spacer = st.columns([3, 1])
-        with col_header:
+    with st.container(border=True):
+        header_column, spacer_column = st.columns([3, 1])
+        with header_column:
             st.subheader("Risk score breakdown")
-        with col_spacer:
+        with spacer_column:
             st.caption("Policy score")
         st.caption(
             "Points each factor adds to the blended policy score (weight × "
@@ -358,7 +558,7 @@ def render_contribution_chart(assessment: RiskAssessment) -> None:
         st.echarts_chart(
             {
                 "dataset": {"source": frame},
-                "grid": {"left": 8, "right": 24, "top": 8, "bottom": 8, "containLabel": True},
+                "grid": {"left": 8, "right": 40, "top": 8, "bottom": 8, "containLabel": True},
                 # Axis counts percentage points; the heaviest weight is 40%.
                 "xAxis": {"type": "value", "max": 40, "axisLabel": {"formatter": "{value}%"}},
                 "yAxis": {"type": "category"},
@@ -369,12 +569,13 @@ def render_contribution_chart(assessment: RiskAssessment) -> None:
                         "type": "bar",
                         "name": "Points added",
                         "encode": {"x": "Points", "y": "Signal"},
-                        "itemStyle": {"borderRadius": [0, 4, 4, 0]},
+                        "barMaxWidth": 26,
+                        "itemStyle": {"borderRadius": [0, 6, 6, 0]},
                         "label": {"show": True, "position": "right", "formatter": "{@Label}"},
                     }
                 ],
             },
-            height=290,
+            height=250,
             alt=(
                 "Points added to the blended score by factor: "
                 + ", ".join(
@@ -383,7 +584,6 @@ def render_contribution_chart(assessment: RiskAssessment) -> None:
             ),
         )
 
-    with st.container(border=True):
         st.markdown("**Weights & signal risk**")
         st.dataframe(
             pd.DataFrame(
@@ -411,32 +611,39 @@ def render_contribution_chart(assessment: RiskAssessment) -> None:
 
 
 def render_decision_card(assessment: RiskAssessment) -> None:
-    """Prominent decision state with the threshold pill and next steps."""
+    """Prominent decision state, score gauge and next steps."""
     style = LEVEL_STYLE[assessment.level]
+    marker = min(max(assessment.score, 0.0), 1.0) * 100
 
     with st.container(border=True):
         st.subheader("Decision")
         st.markdown(
-            f":{style['color']}[{style['icon'].replace('_', ' ').title()}] "
-            f"**{assessment.decision}** · {assessment.level} risk"
+            f"""
+            <div class="rp-decision" style="--rp-accent: {style['accent']};
+                 --rp-soft: {style['soft']}; --rp-accent-text: {style['text']};">
+                <div class="rp-decision-label">Recommended outcome</div>
+                <div class="rp-decision-value">{assessment.decision}</div>
+                <div class="rp-decision-meta">
+                    {assessment.level} risk · blended score {assessment.score:.1%}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
-        with st.container(horizontal=True, vertical_alignment="center"):
-            st.markdown("**Risk score**")
-            st.badge(
-                f"< {config.LOW_RISK_MAX:.0%}"
-                if assessment.level == "Low"
-                else (
-                    f"{config.LOW_RISK_MAX:.0%} – {config.MEDIUM_RISK_MAX:.0%}"
-                    if assessment.level == "Medium"
-                    else f"> {config.MEDIUM_RISK_MAX:.0%}"
-                ),
-                color=style["color"],
-            )
-        st.metric(
-            "Policy score",
-            f"{assessment.score:.1%}",
-            border=False,
+        st.markdown(
+            f"""
+            <div class="rp-gauge">
+                <div class="rp-gauge-marker" style="left: {marker:.1f}%;"></div>
+            </div>
+            <div class="rp-gauge-scale">
+                <span>0%</span>
+                <span>Approve &lt; {config.LOW_RISK_MAX:.0%}</span>
+                <span>Review ≤ {config.MEDIUM_RISK_MAX:.0%}</span>
+                <span>100%</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
         messages = {
@@ -483,12 +690,15 @@ def render_applicant_summary(
                 "DEBTCONSOLIDATION", "DEBT CONSOLIDATION"
             ),
         }
-        columns = st.columns(4)
+        columns = st.columns(3)
         items = list(summary.items())
         for index, (field, value) in enumerate(items):
-            with columns[index % 4]:
-                st.caption(field)
-                st.markdown(f"**{value}**")
+            with columns[index % 3]:
+                st.markdown(
+                    f'<div class="rp-kv-label">{field}</div>'
+                    f'<div class="rp-kv-value">{value}</div>',
+                    unsafe_allow_html=True,
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -555,7 +765,6 @@ def render_benchmark(metrics: dict) -> None:
             st.info("Run `python train_model.py` to generate `models/metrics.json`.")
             return
 
-        # Four inline stats; the row is wide enough not to clip at 1280px.
         stat_columns = st.columns(4, gap="small")
         stats = [
             ("Accuracy", f"{metrics['accuracy']:.1%}",
@@ -584,7 +793,7 @@ def render_benchmark(metrics: dict) -> None:
 
 def render_portfolio(reference: pd.DataFrame, assessment: RiskAssessment) -> None:
     """Where the applicant's LTI sits inside the historical portfolio."""
-    with st.container(border=True, height=420):
+    with st.container(border=True):
         header_column, spacer_column = st.columns([3, 1])
         with header_column:
             st.subheader("LTI position")
@@ -685,6 +894,8 @@ def render_methodology(metrics: dict) -> None:
 # ---------------------------------------------------------------------------
 # Page
 # ---------------------------------------------------------------------------
+st.markdown(CARD_CSS, unsafe_allow_html=True)
+
 try:
     pipeline = get_pipeline()
 except FileNotFoundError:
@@ -704,17 +915,11 @@ except ValueError as exc:
     st.error(str(exc), title="Check the inputs", icon=":material/error:")
     st.stop()
 
-# Header bar ---------------------------------------------------------------
-st.markdown(CARD_CSS, unsafe_allow_html=True)
-with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):
-    header_column, badge_column = st.columns([4, 1], gap="medium")
-    with header_column:
-        st.markdown("# Dashboard")
-        st.caption("Pre-approval risk assessment — before pricing.")
-    with badge_column:
-        with st.container(horizontal=True, vertical_alignment="center"):
-            st.badge("Model live", icon=":material/bolt:", color="green")
+render_header()
+st.space("small")
 
+# Primary action sits directly under the header, full width, so it is the
+# first thing the eye lands on after the title.
 if st.button(
     "Run assessment",
     type="primary",
@@ -736,7 +941,6 @@ if assessment is None:
         title="No assessment yet",
         icon=":material/info:",
     )
-    st.subheader("Recent assessments")
     render_history()
     st.stop()
 
@@ -750,10 +954,6 @@ if stale:
 
 # Metric cards -------------------------------------------------------------
 render_metric_cards(assessment)
-st.space("small")
-
-# Applicant strip ----------------------------------------------------------
-render_applicant_summary(customer_label, values, assessment)
 st.space("small")
 
 # Analytics row ------------------------------------------------------------
