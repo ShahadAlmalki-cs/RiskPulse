@@ -32,7 +32,7 @@ product scope.
 | Metric | Value |
 |---|---|
 | Accuracy | 88.4% |
-| Precision | 88.0% |
+| Precision | 87.9% |
 | Recall (default class) | 54.6% |
 | F1 | 67.4% |
 | ROC AUC | 0.869 |

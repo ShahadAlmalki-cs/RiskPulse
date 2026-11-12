@@ -6,11 +6,11 @@ Run from the project root:
 
 Layout
 ------
-Top bar          "RiskPulse Dashboard" + policy indicator
-Metric row       Blended risk score · Model default probability · Model margin
-                 · Loan-to-income (colored by risk level)
-Analytics row    Score contribution by factor | Decision card
-History row      Recent assessments (this session) | Model benchmark
+Top bar          "Dashboard" title + subtitle + model badge
+Metric row       Model default probability · Model margin · LTI · Blended score
+Analytics row    Risk score contribution (bar) | Decision card
+Summary row      Applicant summary | LTI position
+Bottom row       Recent assessments | Model performance
 
 All risk math lives in ``src/risk.py``, feature preparation in
 ``src/features.py`` and artifact loading in ``src/artifacts.py``; this module is
@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from datetime import datetime
 
 import pandas as pd
@@ -57,10 +58,32 @@ LEVEL_STYLE = {
 }
 
 # ECharts bar colors matched to the brand palette.
-SIGNAL_COLORS = ["#0E7C86", "#1D4ED8", "#7C3AED"]
+SIGNAL_COLORS = ["#263045", "#9AB9E4", "#08142A"]
 HISTORY_SESSION_KEY = "assessment_history"
 ASSESSMENT_SESSION_KEY = "assessment"
 INPUTS_SESSION_KEY = "assessment_inputs"
+
+# Custom card styling: white surface, soft shadow, generous padding. Applied
+# through st.markdown so the theme file stays the single source of color truth.
+CARD_CSS = """
+<style>
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        box-shadow: 0 1px 3px rgba(11, 21, 40, 0.05);
+    }
+    div[data-testid="stMetricValue"] {
+        font-weight: 700;
+        letter-spacing: -0.02em;
+    }
+    /* tighter, more card-like metric tiles */
+    div[data-testid="stMetric"] {
+        background: #FFFFFF;
+        border: 1px solid #E3E6F5;
+        border-radius: 14px;
+        padding: 14px 16px;
+        box-shadow: 0 1px 3px rgba(11, 21, 40, 0.05);
+    }
+</style>
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -151,6 +174,34 @@ def assessment_is_stale(values: dict[str, object]) -> bool:
     return st.session_state.get(INPUTS_SESSION_KEY) != inputs_fingerprint(values)
 
 
+# Digit translation: any Unicode digit variant -> ASCII (English) digits.
+_DIGIT_MAP = str.maketrans(
+    "٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹",
+    "01234567890123456789",
+)
+
+
+def _parse_number(raw_text: str, label: str) -> float:
+    """Parse a free-text numeric field using English digits.
+
+    Accepts "12,000", "12 000", "12000.5" and Arabic-Indic digit forms; the
+    value is always normalised to a plain float so the model sees identical
+    numbers no matter how the user's keyboard or OS locale renders them.
+    Raises ``ValueError`` with a friendly message on unparseable input.
+    """
+    cleaned = raw_text.translate(_DIGIT_MAP).strip().replace(",", "").replace(" ", "")
+    cleaned = cleaned.replace("٫", ".").replace("٫", ".")  # Arabic decimal marks
+    try:
+        number = float(cleaned)
+    except ValueError as exc:
+        raise ValueError(
+            f"{label} must be a number using English digits (e.g. 60000)."
+        ) from exc
+    if not math.isfinite(number):
+        raise ValueError(f"{label} must be a finite number.")
+    return number
+
+
 # ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
@@ -158,8 +209,8 @@ def render_sidebar() -> tuple[dict[str, object], str]:
     """Collect applicant inputs in a grouped, compact sidebar."""
     with st.sidebar:
         st.markdown(
-            f"### :material/monitoring: RiskPulse\n"
-            f":small[Credit risk & BNPL screening]"
+            "### :material/monitoring: RiskPulse\n"
+            ":small[Pre-approval risk assessment — before pricing]"
         )
         st.divider()
 
@@ -167,24 +218,21 @@ def render_sidebar() -> tuple[dict[str, object], str]:
         customer_name = st.text_input(
             "Customer name", value="Applicant 1", placeholder="e.g. Sara Ali"
         )
-        person_age = st.number_input("Age", min_value=18, max_value=100, value=30)
-        person_income = st.number_input(
+        # Numeric fields are plain text inputs so the browser always shows
+        # Latin (English) digits, regardless of the operating-system locale.
+        person_age_text = st.text_input(
+            "Age", value="30", help="Years (18–100)."
+        )
+        person_income_text = st.text_input(
             "Annual income",
-            min_value=1_000,
-            max_value=10_000_000,
-            value=60_000,
-            step=1_000,
-            help="Gross annual income; drives the loan-to-income ratio.",
+            value="60000",
+            help="Gross annual income in USD; drives the loan-to-income ratio.",
         )
-        person_emp_length = st.number_input(
-            "Employment length (years)",
-            min_value=0.0,
-            max_value=60.0,
-            value=5.0,
-            step=0.5,
+        person_emp_length_text = st.text_input(
+            "Employment length (years)", value="5.0", help="Years (0–60)."
         )
-        cb_person_cred_hist_length = st.number_input(
-            "Credit history length (years)", min_value=0, max_value=80, value=5
+        cb_person_cred_hist_text = st.text_input(
+            "Credit history length (years)", value="5", help="Years (0–80)."
         )
         person_home_ownership = st.selectbox(
             "Home ownership", config.HOME_OWNERSHIP_OPTIONS
@@ -198,19 +246,19 @@ def render_sidebar() -> tuple[dict[str, object], str]:
         )
 
         st.markdown("**Loan request**")
-        loan_amnt = st.number_input(
-            "Loan amount", min_value=500, max_value=1_000_000, value=10_000, step=500
+        loan_amnt_text = st.text_input(
+            "Loan amount", value="10000", help="USD (500–1,000,000)."
         )
         loan_intent = st.selectbox("Loan purpose", config.LOAN_INTENT_OPTIONS)
 
         values: dict[str, object] = {
-            "person_age": person_age,
-            "person_income": person_income,
-            "person_emp_length": person_emp_length,
+            "person_age": _parse_number(person_age_text, "Age"),
+            "person_income": _parse_number(person_income_text, "Annual income"),
+            "person_emp_length": _parse_number(person_emp_length_text, "Employment length"),
             "person_home_ownership": person_home_ownership,
-            "cb_person_cred_hist_length": cb_person_cred_hist_length,
+            "cb_person_cred_hist_length": _parse_number(cb_person_cred_hist_text, "Credit history length"),
             "cb_person_default_on_file": cb_person_default_on_file,
-            "loan_amnt": loan_amnt,
+            "loan_amnt": _parse_number(loan_amnt_text, "Loan amount"),
             "loan_intent": loan_intent,
         }
 
@@ -240,44 +288,46 @@ def render_sidebar() -> tuple[dict[str, object], str]:
 # Top metric cards
 # ---------------------------------------------------------------------------
 def render_metric_cards(assessment: RiskAssessment) -> None:
-    """Four top cards, each colored by the applicant's risk level."""
+    """Four top cards. Order matches the reference: model first, policy last."""
     style = LEVEL_STYLE[assessment.level]
-    color = style["color"]
 
-    with st.container(horizontal=True):
-        st.metric(
-            f":{color}[:material/shield: Blended risk score]",
-            f"{assessment.score:.1%}",
-            delta=f"{assessment.level} risk",
-            delta_color="off",
-            border=True,
-            help="Illustrative, manually weighted policy overlay: 40% model + "
-                 "40% LTI + 20% prior default. It double-counts affordability "
-                 "and credit history, which the model already encodes. Not a "
-                 "model output and not statistically optimised.",
-        )
-        st.metric(
-            "Model default probability (clipped)",
+    cards = [
+        (
+            ":material/monitoring: Model Probability",
             f"{assessment.model_probability:.1%}",
-            delta=f"raw {assessment.raw_model_probability:.1%}",
-            delta_color="off",
-            border=True,
-            help="Model output bounded to the 2%–98% guardrail.",
-        )
-        st.metric(
-            "Model margin",
+            f"≈ {assessment.raw_model_probability:.1%} raw",
+            "Model default probability, clipped to the 2%–98% guardrail. "
+            "Not a calibrated probability — see Model performance.",
+        ),
+        (
+            ":material/shield: Model Margin",
             f"{assessment.model_confidence:.0%}",
-            border=True,
-            help="Gap between the model's default and non-default probabilities.",
-        )
-        st.metric(
-            "Loan-to-income (LTI)",
+            "|2p − 1|",
+            "Gap between the model's default and non-default probabilities. "
+            "A restatement of the probability, not an independent confidence measure.",
+        ),
+        (
+            ":material/balance: LTI",
             f"{assessment.loan_to_income:.1%}",
-            delta=f"Grade {assessment.loan_grade}",
-            delta_color="off",
-            border=True,
-            help="Loan amount divided by annual income.",
-        )
+            "Loan / Income",
+            "Loan amount divided by annual income. Drives both the model and "
+            "the policy overlay.",
+        ),
+        (
+            f":{style['color']}[:material/diamond: Policy Score]",
+            f"{assessment.score:.1%}",
+            f"{assessment.level} risk",
+            "Blended policy score — an illustrative, manually weighted "
+            "overlay: 40% model + 40% LTI + 20% prior default. It "
+            "double-counts affordability and credit history, which the "
+            "model already encodes. Not a model output and not "
+            "statistically optimised.",
+        ),
+    ]
+    columns = st.columns(4, gap="small")
+    for column, (label, value, sub, tip) in zip(columns, cards):
+        with column:
+            st.metric(label, value, delta=sub, delta_color="off", border=True, help=tip)
 
 
 # ---------------------------------------------------------------------------
@@ -295,11 +345,15 @@ def render_contribution_chart(assessment: RiskAssessment) -> None:
     ]
     frame = pd.DataFrame(rows).sort_values("Points", ascending=True)
 
-    with st.container(border=True):
-        st.subheader("Score contribution by factor")
+    with st.container(border=True, height=420):
+        col_header, col_spacer = st.columns([3, 1])
+        with col_header:
+            st.subheader("Risk score breakdown")
+        with col_spacer:
+            st.caption("Policy score")
         st.caption(
-            "Points each factor adds to the blended score (weight × signal "
-            "risk). The bars sum to the final score."
+            "Points each factor adds to the blended policy score (weight × "
+            "signal risk). The bars sum to the final score."
         )
         st.echarts_chart(
             {
@@ -320,7 +374,7 @@ def render_contribution_chart(assessment: RiskAssessment) -> None:
                     }
                 ],
             },
-            height=260,
+            height=290,
             alt=(
                 "Points added to the blended score by factor: "
                 + ", ".join(
@@ -357,40 +411,33 @@ def render_contribution_chart(assessment: RiskAssessment) -> None:
 
 
 def render_decision_card(assessment: RiskAssessment) -> None:
-    """Visual decision state and the automatic next steps."""
+    """Prominent decision state with the threshold pill and next steps."""
     style = LEVEL_STYLE[assessment.level]
 
     with st.container(border=True):
+        st.subheader("Decision")
+        st.markdown(
+            f":{style['color']}[{style['icon'].replace('_', ' ').title()}] "
+            f"**{assessment.decision}** · {assessment.level} risk"
+        )
+
         with st.container(horizontal=True, vertical_alignment="center"):
-            st.subheader("Decision")
+            st.markdown("**Risk score**")
             st.badge(
-                assessment.decision,
-                icon=f":material/{style['icon']}:",
+                f"< {config.LOW_RISK_MAX:.0%}"
+                if assessment.level == "Low"
+                else (
+                    f"{config.LOW_RISK_MAX:.0%} – {config.MEDIUM_RISK_MAX:.0%}"
+                    if assessment.level == "Medium"
+                    else f"> {config.MEDIUM_RISK_MAX:.0%}"
+                ),
                 color=style["color"],
             )
         st.metric(
-            f":{style['color']}[Risk level]",
-            f"{assessment.level} · {assessment.score:.1%}",
+            "Policy score",
+            f"{assessment.score:.1%}",
             border=False,
         )
-
-        bands = [
-            (f"< {config.LOW_RISK_MAX:.0%}", "Low", "green"),
-            (
-                f"{config.LOW_RISK_MAX:.0%} – {config.MEDIUM_RISK_MAX:.0%}",
-                "Medium",
-                "orange",
-            ),
-            (f"> {config.MEDIUM_RISK_MAX:.0%}", "High", "red"),
-        ]
-        with st.container(horizontal=True):
-            for band, level, band_color in bands:
-                active = level == assessment.level
-                st.badge(
-                    f"{band} · {level}",
-                    color=band_color if active else "gray",
-                    icon=f":material/{'radio_button_checked' if active else 'radio_button_unchecked'}:",
-                )
 
         messages = {
             "Low": (
@@ -496,52 +543,53 @@ def render_history() -> None:
 # ---------------------------------------------------------------------------
 # Model benchmark
 # ---------------------------------------------------------------------------
-def render_benchmark(assessment: RiskAssessment, metrics: dict) -> None:
-    """Model quality plus the applicant-versus-portfolio comparison."""
+def render_benchmark(metrics: dict) -> None:
+    """Model quality as a compact stat strip: accuracy, PR-AUC, Brier, recall."""
     with st.container(border=True):
-        st.subheader("Model benchmark")
+        header_column, info_column = st.columns([3, 1])
+        with header_column:
+            st.subheader("Model performance")
+        with info_column:
+            st.caption("Hold-out test set")
         if not metrics:
             st.info("Run `python train_model.py` to generate `models/metrics.json`.")
             return
 
-        # Equal columns keep the three benchmark cards on a single row.
-        accuracy_column, auc_column, rows_column = st.columns(3)
-        accuracy_column.metric("Accuracy", f"{metrics['accuracy']:.1%}", border=True,
-            help="Share of correct classifications. Not evidence of quality on its own: "
-                 "78% of applicants repay, so a majority-guesser already reaches that.")
-        auc_column.metric("ROC AUC", f"{metrics['roc_auc']:.3f}", border=True,
-            help="Ranking quality across all thresholds.")
-        rows_column.metric("Default recall", f"{metrics['default_recall']:.1%}", border=True,
-            help="Share of actual defaults the model flags. The business-critical metric "
-                 "for a risk screener.")
+        # Four inline stats; the row is wide enough not to clip at 1280px.
+        stat_columns = st.columns(4, gap="small")
+        stats = [
+            ("Accuracy", f"{metrics['accuracy']:.1%}",
+             "Share of correct classifications. Not evidence of quality on "
+             "its own: 78% of applicants repay, so a majority-guesser "
+             "already reaches that."),
+            ("PR-AUC", f"{metrics['pr_auc']:.3f}",
+             "Ranking quality under class imbalance — the headline metric "
+             "for this 21.8% default base rate."),
+            ("Brier", f"{metrics['brier']:.3f}",
+             "Probability calibration. Consistent with imperfect calibration "
+             "(RandomForest vote shares, not calibrated probabilities)."),
+            ("Default Recall", f"{metrics['default_recall']:.1%}",
+             "Share of actual defaults the model flags. The business-critical "
+             "metric for a risk screener."),
+        ]
+        for column, (label, value, tip) in zip(stat_columns, stats):
+            with column:
+                st.metric(label, value, border=True, help=tip)
         st.caption(
-            f"PR-AUC {metrics['pr_auc']:.3f} · Brier {metrics['brier']:.3f} · "
-            f"precision {metrics['precision']:.1%} · F1 {metrics['f1']:.1%} · "
+            f"ROC AUC {metrics['roc_auc']:.3f} · precision "
+            f"{metrics['precision']:.1%} · F1 {metrics['f1']:.1%} · "
             f"trained on {metrics['n_train']:,} applicants"
-        )
-
-        comparison = pd.DataFrame(
-            {
-                "Segment": ["This applicant", "Portfolio average"],
-                "Default probability": [
-                    assessment.model_probability,
-                    metrics.get("train_default_rate", 0.0),
-                ],
-            }
-        )
-        st.bar_chart(
-            comparison,
-            x="Segment",
-            y="Default probability",
-            height=200,
-            alt="Applicant model default probability next to the portfolio average.",
         )
 
 
 def render_portfolio(reference: pd.DataFrame, assessment: RiskAssessment) -> None:
     """Where the applicant's LTI sits inside the historical portfolio."""
-    with st.container(border=True):
-        st.subheader("Loan-to-income position")
+    with st.container(border=True, height=420):
+        header_column, spacer_column = st.columns([3, 1])
+        with header_column:
+            st.subheader("LTI position")
+        with spacer_column:
+            st.caption("Portfolio")
         if reference.empty or "loan_percent_income" not in reference:
             st.info(
                 "Reference profiles unavailable. Run "
@@ -575,7 +623,7 @@ def render_portfolio(reference: pd.DataFrame, assessment: RiskAssessment) -> Non
             shares,
             x="LTI band",
             y="Share of applicants",
-            height=240,
+            height=190,
             alt="Share of historical applicants in each loan-to-income band.",
         )
 
@@ -627,8 +675,9 @@ def render_methodology(metrics: dict) -> None:
             )
 
     if metrics:
+        feature_count = len(metrics.get("feature_names", []))
         st.caption(
-            f"Model: RandomForestClassifier · {len(metrics['features'])} features · "
+            f"Model: RandomForestClassifier · {feature_count} raw features · "
             f"trained on {metrics['n_train']:,} applicants."
         )
 
@@ -656,23 +705,21 @@ except ValueError as exc:
     st.stop()
 
 # Header bar ---------------------------------------------------------------
+st.markdown(CARD_CSS, unsafe_allow_html=True)
 with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):
-    st.markdown("## RiskPulse Dashboard")
-    with st.container(horizontal=True, vertical_alignment="center"):
-        st.badge("Credit risk & BNPL", color="blue")
-        st.badge("Model live", icon=":material/bolt:", color="green")
-
-st.caption(
-    "Model default probability blended with affordability and credit history "
-    "into one screening score."
-)
+    header_column, badge_column = st.columns([4, 1], gap="medium")
+    with header_column:
+        st.markdown("# Dashboard")
+        st.caption("Pre-approval risk assessment — before pricing.")
+    with badge_column:
+        with st.container(horizontal=True, vertical_alignment="center"):
+            st.badge("Model live", icon=":material/bolt:", color="green")
 
 if st.button(
     "Run assessment",
     type="primary",
     icon=":material/play_arrow:",
     width="stretch",
-    help="Scores the current sidebar inputs and adds them to the session history.",
 ):
     current = assess(pipeline, values, customer_label)
     st.session_state[ASSESSMENT_SESSION_KEY] = current
@@ -718,18 +765,22 @@ with decision_column:
 
 st.space("small")
 
-# History + benchmark ------------------------------------------------------
-history_column, benchmark_column = st.columns([3, 2], gap="medium")
-with history_column:
-    render_history()
-with benchmark_column:
-    render_benchmark(assessment, metrics)
+# Summary row: applicant strip next to the portfolio LTI position -----------
+summary_column, lti_column = st.columns([3, 2], gap="medium")
+with summary_column:
+    render_applicant_summary(customer_label, values, assessment)
+with lti_column:
+    render_portfolio(get_reference_profiles(), assessment)
 
 st.space("small")
 
-# Portfolio position --------------------------------------------------------
-with st.expander(":material/group: Portfolio position", expanded=False):
-    render_portfolio(get_reference_profiles(), assessment)
+# Model performance — full width so the four stat cards never clip ----------
+render_benchmark(metrics)
+
+st.space("small")
+
+# Recent assessments — full width so seven columns fit without clipping ------
+render_history()
 
 with st.container(horizontal=True):
     with st.popover(":material/menu_book: Methodology"):
@@ -739,7 +790,7 @@ with st.container(horizontal=True):
             f"**Raw model probability:** {assessment.raw_model_probability:.2%}  \n"
             f"**Clipped probability:** {assessment.model_probability:.2%}  \n"
             f"**Model margin (|2p-1|):** {assessment.model_confidence:.1%}  \n"
-            f"**Loan grade:** {assessment.loan_grade}"
+            f"**Policy grade:** {assessment.loan_grade}"
         )
         for item in assessment.contributions:
             st.markdown(
