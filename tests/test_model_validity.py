@@ -243,7 +243,7 @@ def test_policy_grade_labelled_as_heuristic():
     assert '"**Loan grade**"' not in app_source, (
         "app.py still uses the misleading 'Loan grade' label"
     )
-    assert "**Policy grade**" in app_source
+    assert "Policy grade</strong>" in app_source
     # and must clarify it is internal, not lender-assigned
     assert "not a" in app_source and "lender-assigned" in app_source
 

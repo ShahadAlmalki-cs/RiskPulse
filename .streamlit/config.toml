@@ -1,125 +1,116 @@
-# RiskPulse dashboard theme — light financial-SaaS look
-# Lavender canvas, white rounded cards, navy typography, blue accents.
+# RiskPulse brand theme â€” derived from riskpulse-logo-horizontal-reversed.svg
+#
+# Palette (taken straight from the logo):
+#   ink      #0B1528  deep navy background the logo is drawn for
+#   white    #FFFFFF  "Risk" and the R monogram
+#   pulse    #7FA3EE  "Pulse" and the ECG stroke   (primary)
+#   coral    #F6866E  the pulse end-point dot
+# Surfaces are navy tints of the logo ink, so the whole UI reads as one
+# material. Colour is used for meaning only: coral/red is reserved for declines
+# and errors, green for approvals, amber for manual review.
 
 [theme]
 showWidgetBorder = true
-showSidebarBorder = true
-baseRadius = "14px"
+showSidebarBorder = false
+baseRadius = "12px"
 buttonRadius = "10px"
-font = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
-headingFont = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@600;700;800&display=swap"
+font = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+headingFont = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@600;700&display=swap"
 codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
 baseFontSize = 14
 baseFontWeight = 400
-codeFontSize = "13px"
-headingFontSizes = ["26px", "21px", "18px", "16px", "14px", "12px"]
-headingFontWeights = [700, 700, 600, 600, 500, 500]
+codeFontSize = "12.5px"
+headingFontSizes = ["24px", "19px", "16px", "15px", "14px", "12px"]
+headingFontWeights = [700, 600, 600, 600, 600, 600]
 linkUnderline = false
-paddingTop = "1rem"
-paddingBottom = "3rem"
+paddingTop = "1.25rem"
+paddingBottom = "2rem"
 
 [theme.light]
-primaryColor = "#3569D4"
-backgroundColor = "#F1F2FC"
+primaryColor = "#3E6FD6"
+backgroundColor = "#F2F5FD"
 secondaryBackgroundColor = "#FFFFFF"
-codeBackgroundColor = "#EEF0FA"
+codeBackgroundColor = "#EEF2FC"
 textColor = "#0B1528"
-linkColor = "#3569D4"
-borderColor = "#E3E6F5"
+linkColor = "#2F5FC4"
+borderColor = "#DDE4F4"
 codeTextColor = "#3A4763"
-greenColor = "#1E9E6A"
-redColor = "#E15241"
-yellowColor = "#D9930D"
-orangeColor = "#E1760B"
-blueColor = "#3569D4"
-violetColor = "#7A5AF8"
-grayColor = "#77839A"
-chartCategoricalColors = [
-    "#3569D4",
-    "#7FB0F5",
-    "#0B1528",
-    "#F6866E",
-    "#1E9E6A",
-    "#D9930D",
-    "#7A5AF8",
-    "#77839A",
-]
+greenColor = "#0F7A50"
+redColor = "#C2412F"
+yellowColor = "#9A6A00"
+orangeColor = "#B4591B"
+blueColor = "#2F5FC4"
+violetColor = "#4B5BD6"
+grayColor = "#5F6B85"
+chartCategoricalColors = ["#3E6FD6", "#7FA3EE", "#0B1528", "#F6866E", "#0F7A50", "#9A6A00"]
 chartSequentialColors = [
-    "#EEF2FE",
-    "#D6E2FB",
-    "#B9CDF7",
-    "#93B4F1",
-    "#6D97E9",
-    "#4D7CDD",
-    "#3569D4",
-    "#2854B4",
-    "#1D3F8C",
-    "#152D6B",
+    "#F2F5FD",
+    "#E3EBFB",
+    "#CBDDF8",
+    "#A9C6F3",
+    "#7FA3EE",
+    "#5A87E4",
+    "#3E6FD6",
+    "#2F5FC4",
+    "#24489A",
+    "#0B1528",
 ]
-dataframeBorderColor = "#E3E6F5"
-dataframeHeaderBackgroundColor = "#F6F7FE"
+dataframeBorderColor = "#DDE4F4"
+dataframeHeaderBackgroundColor = "#F6F8FE"
 dataframeHeaderTextColor = "#0B1528"
 
 [theme.dark]
-primaryColor = "#7FB0F5"
-backgroundColor = "#0B1220"
-secondaryBackgroundColor = "#111C2E"
-codeBackgroundColor = "#111C2E"
-textColor = "#E2E8F0"
-linkColor = "#7FB0F5"
-borderColor = "#1E293B"
-codeTextColor = "#CBD5E1"
-greenColor = "#34D399"
-redColor = "#F87171"
-yellowColor = "#FBBF24"
-orangeColor = "#FB923C"
-blueColor = "#7FB0F5"
-violetColor = "#A78BFA"
-grayColor = "#94A3B8"
-chartCategoricalColors = [
-    "#7FB0F5",
-    "#3569D4",
-    "#E2E8F0",
-    "#F6866E",
-    "#34D399",
-    "#FBBF24",
-    "#A78BFA",
-    "#94A3B8",
-]
+primaryColor = "#8FB0F0"
+backgroundColor = "#0B1528"
+secondaryBackgroundColor = "#101D33"
+codeBackgroundColor = "#13223B"
+textColor = "#E8EDF7"
+linkColor = "#8FB0F0"
+borderColor = "#1E2C47"
+codeTextColor = "#C4D0E4"
+greenColor = "#5BD0A2"
+redColor = "#F6866E"
+yellowColor = "#E8B75A"
+orangeColor = "#F2A16B"
+blueColor = "#8FB0F0"
+violetColor = "#9FA9F5"
+grayColor = "#93A1BA"
+chartCategoricalColors = ["#8FB0F0", "#7FA3EE", "#E8EDF7", "#F6866E", "#5BD0A2", "#E8B75A"]
 chartSequentialColors = [
-    "#152D6B",
-    "#1D3F8C",
-    "#2854B4",
-    "#3569D4",
-    "#4D7CDD",
-    "#6D97E9",
-    "#93B4F1",
-    "#B9CDF7",
-    "#D6E2FB",
-    "#EEF2FE",
+    "#0B1528",
+    "#13223B",
+    "#1B2F50",
+    "#24406B",
+    "#31548A",
+    "#416EA9",
+    "#5A87E4",
+    "#7FA3EE",
+    "#A9C6F3",
+    "#E3EBFB",
 ]
-dataframeBorderColor = "#1E293B"
-dataframeHeaderBackgroundColor = "#111C2E"
-dataframeHeaderTextColor = "#E2E8F0"
+dataframeBorderColor = "#1E2C47"
+dataframeHeaderBackgroundColor = "#0F1B2F"
+dataframeHeaderTextColor = "#E8EDF7"
 
 [theme.sidebar]
-paddingTop = "0.75rem"
+paddingTop = "1rem"
 paddingBottom = "1.5rem"
 
 [theme.light.sidebar]
 backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F4F5FD"
-codeBackgroundColor = "#EEF0FA"
+secondaryBackgroundColor = "#F2F5FD"
+codeBackgroundColor = "#EEF2FC"
 textColor = "#0B1528"
-borderColor = "#E9EBF8"
-primaryColor = "#3569D4"
-linkColor = "#3569D4"
+borderColor = "#DDE4F4"
+primaryColor = "#3E6FD6"
+linkColor = "#2F5FC4"
 
 [theme.dark.sidebar]
-backgroundColor = "#050B16"
-secondaryBackgroundColor = "#111C2E"
-codeBackgroundColor = "#111C2E"
-textColor = "#E2E8F0"
-borderColor = "#1E293B"
-primaryColor = "#7FB0F5"
-linkColor = "#7FB0F5"
+backgroundColor = "#080F1E"
+secondaryBackgroundColor = "#101D33"
+codeBackgroundColor = "#13223B"
+textColor = "#E8EDF7"
+borderColor = "#1E2C47"
+primaryColor = "#8FB0F0"
+linkColor = "#8FB0F0"
+
