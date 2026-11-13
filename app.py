@@ -96,13 +96,17 @@ def _logo(color: str) -> str:
 
 LOGO_SVG = _logo("#FFFFFF")
 LOGO_SVG_INK = _logo("#0B1528")
+# In dark mode the lockup is used exactly as drawn (white on navy); in light
+# mode it is re-inked. Decided from the active theme so the sidebar stays legible.
+LOGO_SVG_SIDEBAR = LOGO_SVG if st.context.theme.type == "dark" else LOGO_SVG_INK
 
 # ---------------------------------------------------------------------------
 # Design tokens
 # ---------------------------------------------------------------------------
 # One palette for both themes. Every card, badge and chart reads from here, so
 # the light and dark themes stay in sync and text always keeps a strong
-# contrast against its own surface.
+# contrast against its own surface. Level colours carry a dark-mode variant;
+# ``level_style`` picks the pair for the active theme.
 LEVEL_STYLE = {
     "Low": {
         "color": "green",
@@ -111,6 +115,9 @@ LEVEL_STYLE = {
         "accent": "#1E9E6A",
         "soft": "rgba(30, 158, 106, 0.12)",
         "text": "#0F7A50",
+        "dark_accent": "#5BD0A2",
+        "dark_soft": "rgba(91, 208, 162, 0.12)",
+        "dark_text": "#5BD0A2",
     },
     "Medium": {
         "color": "orange",
@@ -119,6 +126,9 @@ LEVEL_STYLE = {
         "accent": "#D9930D",
         "soft": "rgba(217, 147, 13, 0.14)",
         "text": "#8A5A00",
+        "dark_accent": "#E8B75A",
+        "dark_soft": "rgba(232, 183, 90, 0.12)",
+        "dark_text": "#E8B75A",
     },
     "High": {
         "color": "red",
@@ -127,11 +137,32 @@ LEVEL_STYLE = {
         "accent": "#E15241",
         "soft": "rgba(225, 82, 65, 0.14)",
         "text": "#B02A1C",
+        "dark_accent": "#F6866E",
+        "dark_soft": "rgba(246, 134, 110, 0.12)",
+        "dark_text": "#F6866E",
     },
 }
 
+
+def is_dark_theme() -> bool:
+    """True when the viewer resolved to the dark theme."""
+    return getattr(st.context.theme, "type", "light") == "dark"
+
+
+def level_style(level: str, dark: bool) -> dict:
+    """Outcome colours for the active theme (same three outcomes, both themes)."""
+    light = LEVEL_STYLE[level]
+    if not dark:
+        return light
+    return {
+        **light,
+        "accent": light["dark_accent"],
+        "soft": light["dark_soft"],
+        "text": light["dark_text"],
+    }
+
 # ECharts bar colors matched to the brand palette.
-SIGNAL_COLORS = ["#3569D4", "#7FB0F5", "#0B1528"]
+SIGNAL_COLORS = ["#335393", "#7FB0F5", "#0B1528"]
 
 HISTORY_SESSION_KEY = "assessment_history"
 ASSESSMENT_SESSION_KEY = "assessment"
@@ -144,8 +175,11 @@ CARD_CSS = """
 <style>
     /* ---- Design tokens ---------------------------------------------------
        Every value is derived from the logo: navy ink, white, periwinkle
-       "pulse" and the coral end-point dot. Two theme blocks keep light and
-       dark reading as one product; no accent outside this family is used. */
+       "pulse" and the coral end-point dot. Surfaces, text and borders are read
+       from the active Streamlit theme at runtime rather than hard-coded, so the
+       custom cards follow light and dark mode without a second stylesheet.
+       The hex fallbacks are the light values: they are only used if a token is
+       ever missing. Accents come from the palette both themes share. */
     :root {
         --rp-surface: var(--st-secondary-background-color, #FFFFFF);
         --rp-canvas: var(--st-background-color, #F2F5FD);
@@ -155,15 +189,21 @@ CARD_CSS = """
         --rp-primary: var(--st-primary-color, #3E6FD6);
 
         --rp-pulse: #7FA3EE;
-        --rp-pulse-strong: #3E6FD6;
+        --rp-pulse-strong: var(--st-primary-color, #3E6FD6);
         --rp-coral: #F6866E;
         --rp-ink: #0B1528;
+        --rp-on-primary: #FFFFFF;
 
-        --rp-soft: #EEF3FD;
-        --rp-soft-strong: #E1E9FA;
+        /* Nested fills are tinted from the real surface, never a fixed light
+           blue: --rp-canvas is the page background the theme bridge reads. */
+        --rp-soft: color-mix(in srgb, var(--st-text-color, #0B1528) 7%, var(--rp-canvas, #F2F5FD));
+        --rp-soft-strong: color-mix(in srgb, var(--st-text-color, #0B1528) 12%, var(--rp-canvas, #F2F5FD));
+        --rp-input: color-mix(in srgb, var(--st-text-color, #0B1528) 3%, var(--rp-canvas, #F2F5FD));
         --rp-shadow: 0 1px 2px rgba(11, 21, 40, 0.05), 0 6px 20px rgba(11, 21, 40, 0.04);
         --rp-radius: 16px;
 
+        /* Outcome colours are set inline per assessment (LEVEL_STYLE), the same
+           in both themes; these are only for non-assessment chrome. */
         --rp-ok: #0F7A50;
         --rp-ok-soft: rgba(15, 122, 80, 0.10);
         --rp-warn: #82590A;
@@ -171,18 +211,15 @@ CARD_CSS = """
         --rp-bad: #A8371F;
         --rp-bad-soft: rgba(194, 65, 47, 0.10);
     }
-    [data-theme="dark"] {
-        --rp-pulse: #8FB0F0;
-        --rp-pulse-strong: #8FB0F0;
-        --rp-soft: #101D33;
-        --rp-soft-strong: #16263F;
-        --rp-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.28);
-        --rp-ok: #5BD0A2;
-        --rp-ok-soft: rgba(91, 208, 162, 0.12);
-        --rp-warn: #E8B75A;
-        --rp-warn-soft: rgba(232, 183, 90, 0.12);
-        --rp-bad: #F6866E;
-        --rp-bad-soft: rgba(246, 134, 110, 0.12);
+    /* Dark outcome colours for the gauge, ladder bands and decision panel.
+       Scoped to a dark colour-scheme preference so light mode is untouched;
+       the per-assessment colours render inline from ``level_style``. */
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --rp-ok: #5BD0A2;
+            --rp-warn: #E8B75A;
+            --rp-bad: #F6866E;
+        }
     }
 
     /* ---- Type ------------------------------------------------------------ */
@@ -214,8 +251,8 @@ CARD_CSS = """
 
     /* ---- Metric tiles ---------------------------------------------------- */
     div[data-testid="stMetric"] {
-        background: var(--rp-surface);
-        border: 1px solid var(--rp-border);
+        background: var(--rp-surface) !important;
+        border: 1px solid var(--rp-border) !important;
         border-radius: var(--rp-radius);
         padding: 14px 16px;
         box-shadow: var(--rp-shadow);
@@ -238,7 +275,8 @@ CARD_CSS = """
 
     /* ---- Cards (bordered containers) ------------------------------------- */
     div[data-testid="stVerticalBlockBorderWrapper"] {
-        background: var(--rp-surface);
+        background: var(--rp-surface) !important;
+        border: 1px solid var(--rp-border) !important;
         border-radius: var(--rp-radius);
     }
 
@@ -246,7 +284,7 @@ CARD_CSS = """
     div[data-testid="stTextInput"] input,
     div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
         border-radius: 10px !important;
-        background: var(--rp-surface) !important;
+        background: var(--rp-input) !important;
         border-color: var(--rp-border) !important;
         transition: border-color 120ms ease, box-shadow 120ms ease;
     }
@@ -268,6 +306,12 @@ CARD_CSS = """
         font-weight: 600;
         border-radius: 10px;
         transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+    }
+    /* Streamlit labels the primary button white regardless of primary colour;
+       on the dark theme's light periwinkle that is 2.2:1. */
+    .stButton > button[kind="primary"],
+    .stButton > button[data-testid="stBaseButton-primary"] {
+        color: var(--rp-on-primary, #FFFFFF) !important;
     }
     .stButton > button:hover:not(:disabled) {
         transform: translateY(-1px);
@@ -298,6 +342,13 @@ CARD_CSS = """
         width: auto;
         max-width: 100%;
         height: 30px;
+    }
+    /* On the light theme the lockup is the reversed (white-ink) file, so its
+       "Risk" wordmark is white on a white sidebar and disappears. Invert and
+       rotate the hue back so white ink -> navy while the brand periwinkle and
+       coral keep their own hues; dark mode is untouched. */
+    @media (prefers-color-scheme: light) {
+        .rp-logo { filter: invert(1) hue-rotate(180deg); }
     }
     .rp-brand-sub {
         margin: 12px 0 2px 0;
@@ -610,6 +661,7 @@ CARD_CSS = """
     .rp-signal {
         height: 100%;
         display: flex;
+        flex-shrink: 0;
         flex-direction: column;
         gap: 7px;
         padding: 18px 18px 16px 18px;
@@ -619,7 +671,7 @@ CARD_CSS = """
         box-shadow: var(--rp-shadow);
     }
     .rp-signal--model { border-top: 3px solid var(--rp-pulse); }
-    .rp-signal--blend { border-top: 3px solid var(--rp-text); }
+    .rp-signal--blend { border-top: 3px solid var(--rp-ink, var(--rp-text)); }
     .rp-signal-head {
         display: flex;
         align-items: center;
@@ -638,8 +690,10 @@ CARD_CSS = """
         text-transform: uppercase;
         padding: 3px 8px;
         border-radius: 999px;
+        /* Ink-on-tint reads on both themes; brand primary-on-tint is only
+           4.3:1 in light mode, so it is not used for body-size text. */
         background: var(--rp-soft);
-        color: var(--rp-pulse-strong);
+        color: var(--rp-text);
         white-space: nowrap;
     }
     .rp-signal-value {
@@ -655,21 +709,27 @@ CARD_CSS = """
         color: var(--rp-muted);
         line-height: 1.45;
     }
+    /* A fixed-height track: the bar sits in a column flex container, so it
+       must not absorb (or be shrunk to) the leftover height. The spacer below
+       it keeps the meta text aligned across both cards. */
     .rp-bar {
+        flex: 0 0 5px;
         height: 5px;
         border-radius: 999px;
         background: var(--rp-soft-strong);
         overflow: hidden;
     }
+    .rp-bar-spacer { flex: 1 1 auto; }
     .rp-bar-fill {
         height: 100%;
         border-radius: 999px;
         background: var(--rp-pulse);
     }
-    .rp-bar-fill--blend { background: var(--rp-text); }
+    .rp-bar-fill--blend { background: var(--rp-ink, var(--rp-text)); }
 
     /* ---- Decision panel -------------------------------------------------- */
     .rp-decision {
+        flex-shrink: 0;
         border-radius: var(--rp-radius);
         padding: 16px 18px;
         border: 1px solid var(--rp-border);
@@ -778,6 +838,23 @@ CARD_CSS = """
         border-top: 1px solid var(--rp-border);
     }
     .rp-footer .rp-logo { height: 22px; opacity: 0.85; }
+    /* In the footer the mark already sits on ink-tinted SVG text for light
+       mode, so it is not inverted again. */
+    .rp-footer .rp-logo { filter: none; }
+    /* The lockup is a markdown image, so it is an <a>: keep the link colour
+       from tinting it. */
+    a:has(> svg.rp-logo) {
+        color: inherit;
+        text-decoration: none;
+    }
+    @media (prefers-color-scheme: dark) {
+        a:has(> svg.rp-logo):focus-visible,
+        .rp-footer a:focus-visible {
+            outline: 2px solid #9DBBF2;
+            outline-offset: 3px;
+            border-radius: 6px;
+        }
+    }
     .rp-footer-text {
         font-size: 12px;
         color: var(--rp-muted);
@@ -980,7 +1057,7 @@ def render_sidebar() -> tuple[dict[str, object], str, str | None]:
     """Collect applicant inputs in a grouped sidebar form."""
     with st.sidebar:
         st.markdown(
-            f'{LOGO_SVG_INK}'
+            f'{LOGO_SVG_SIDEBAR}'
             '<div class="rp-brand-sub">Pre-approval credit risk · before pricing</div>',
             unsafe_allow_html=True,
         )
@@ -1124,7 +1201,7 @@ def render_result_hero(customer_label: str, assessment: RiskAssessment) -> None:
     (large, dark), the model probability is the reference input (smaller,
     periwinkle) and is explicitly labelled a different kind of quantity.
     """
-    style = LEVEL_STYLE[assessment.level]
+    style = level_style(assessment.level, is_dark_theme())
     level_text = {
         "Low": f"Blended score is below {config.LOW_RISK_MAX:.0%} — no manual review required.",
         "Medium": (
@@ -1216,8 +1293,9 @@ def render_signal_cards(assessment: RiskAssessment) -> None:
                 <div class="rp-signal-value">{assessment.model_probability:.1%}</div>
                 <div class="rp-bar"><div class="rp-bar-fill"
                      style="width: {assessment.model_probability * 100:.1f}%;"></div></div>
+                <div class="rp-bar-spacer"></div>
                 <div class="rp-signal-meta">
-                    RandomForest vote share, clipped to a 2%–98% guardrail.
+                    RandomForest vote share, clipped to 2%–98%.
                     Raw {assessment.raw_model_probability:.1%} · not a calibrated probability.
                 </div>
             </div>
@@ -1235,9 +1313,10 @@ def render_signal_cards(assessment: RiskAssessment) -> None:
                 <div class="rp-signal-value">{assessment.score:.1%}</div>
                 <div class="rp-bar"><div class="rp-bar-fill rp-bar-fill--blend"
                      style="width: {assessment.score * 100:.1f}%;"></div></div>
+                <div class="rp-bar-spacer"></div>
                 <div class="rp-signal-meta">
-                    Illustrative 40% model + 40% LTI + 20% prior default overlay.
-                    Drives the decision; not a model output and not statistically optimised.
+                    40% model + 40% LTI + 20% prior default, set by policy.
+                    Drives the decision; not a model output.
                 </div>
             </div>
             """,
@@ -1340,7 +1419,7 @@ def render_contribution_chart(assessment: RiskAssessment) -> None:
 
 def render_decision_card(assessment: RiskAssessment) -> None:
     """Prominent decision state, score gauge and next steps."""
-    style = LEVEL_STYLE[assessment.level]
+    style = level_style(assessment.level, is_dark_theme())
     marker = min(max(assessment.score, 0.0), 1.0) * 100
 
     with st.container(border=True):
@@ -1477,11 +1556,13 @@ def render_history() -> None:
                 "Customer": st.column_config.TextColumn("Customer", width="medium"),
                 "Time": st.column_config.TextColumn("Time", width="small"),
                 "Loan amount": st.column_config.NumberColumn(
-                    "Loan amount", format="$%,.0f"
+                    "Loan amount", format="$%,.0f", width="small"
                 ),
-                "LTI": st.column_config.NumberColumn("LTI", format="percent"),
+                "LTI": st.column_config.NumberColumn("LTI", format="percent", width="small"),
+                # Wide enough for the progress bar plus its percentage label.
                 "Score": st.column_config.ProgressColumn(
-                    "Blended score", format="percent", min_value=0.0, max_value=1.0
+                    "Blended score", format="percent", min_value=0.0, max_value=1.0,
+                    width="medium",
                 ),
                 "Status": st.column_config.TextColumn("Status", width="small"),
                 "Level": None,
@@ -1508,17 +1589,16 @@ def render_benchmark(metrics: dict) -> None:
         stat_columns = st.columns(4, gap="small")
         stats = [
             ("Accuracy", f"{metrics['accuracy']:.1%}",
-             "Share of correct classifications. Not evidence of quality on "
-             "its own: 78% of applicants repay, so a majority-guesser "
-             "already reaches that."),
+             "Share of correct classifications. Not sufficient on its own: "
+             "78% of applicants repay, which is the majority-class baseline."),
             ("PR-AUC", f"{metrics['pr_auc']:.3f}",
-             "Ranking quality under class imbalance — the headline metric "
-             "for this 21.8% default base rate."),
+             "Ranking quality under class imbalance; the primary metric "
+             "at this 21.8% default base rate."),
             ("Brier", f"{metrics['brier']:.3f}",
              "Probability calibration. Consistent with imperfect calibration "
-             "(RandomForest vote shares, not calibrated probabilities)."),
+             "(RandomForest vote shares are not calibrated probabilities)."),
             ("Default Recall", f"{metrics['default_recall']:.1%}",
-             "Share of actual defaults the model flags. The business-critical "
+             "Share of actual defaults the model flags. The most important "
              "metric for a risk screener."),
         ]
         for column, (label, value, tip) in zip(stat_columns, stats):
@@ -1597,7 +1677,7 @@ def render_methodology(metrics: dict) -> None:
             )
             st.caption(
                 "Model probability is bounded to 2%–98%; LTI risk follows a "
-                "smooth saturating curve, so scores never jump between buckets."
+                "smooth saturating curve, so scores change continuously with inputs."
             )
 
     with col2:
@@ -1636,7 +1716,7 @@ def render_footer() -> None:
     st.markdown(
         f"""
         <div class="rp-footer">
-            {LOGO_SVG_INK}
+            {LOGO_SVG_SIDEBAR}
             <div class="rp-footer-text">
                 RiskPulse supports — it does not replace — credit policy decisions.
                 Always pair automated screening with human review. Educational
@@ -1648,10 +1728,120 @@ def render_footer() -> None:
     )
 
 
+# The cards and panels below draw with --rp-* tokens. Streamlit expresses the
+# active theme as emotion class names (there are no --st-* variables and
+# st.context.theme carries only "light"/"dark"), so this script republishes
+# the two facts the page resolved for itself: the page and card backgrounds.
+# Everything else derives from them in CARD_CSS, so light mode keeps its own
+# values and dark mode gets the dark ones. Runs only with
+# unsafe_allow_javascript because it reads computed styles (no arguments).
+THEME_TOKEN_BRIDGE = """
+<script>
+if (!window.__rpThemeBridge) {
+window.__rpThemeBridge = true;
+(function () {
+    function channel(v) {
+        v = Number(v);
+        return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    }
+    function rgbOf(value) {
+        var m = (value || '').match(/[\\d.]+/g);
+        if (!m || m.length < 3) { return null; }
+        return { r: Number(m[0]), g: Number(m[1]), b: Number(m[2]), a: m[3] === undefined ? 1 : Number(m[3]) };
+    }
+    function relativeLuminance(c) {
+        return 0.2126 * channel(c.r / 255) + 0.7152 * channel(c.g / 255) + 0.0722 * channel(c.b / 255);
+    }
+    function luminanceDifference(a, b) {
+        var la = relativeLuminance(a), lb = relativeLuminance(b);
+        var hi = Math.max(la, lb), lo = Math.min(la, lb);
+        return (hi + 0.05) / (lo + 0.05);
+    }
+    // Mirror of the two standalone theme palettes in .streamlit/config.toml
+    // (primary, ink, secondaryBackground, grayText). A custom theme has no
+    // "lifted card" setting, so --rp-surface must come from here: inferring it
+    // from an element that already uses --rp-surface would feed back into
+    // itself and collapse the cards onto the page.
+    var RAMP = {
+        light: {
+            primary: { r: 62, g: 111, b: 214, a: 1 },
+            ink: { r: 11, g: 21, b: 40, a: 1 },
+            card: { r: 255, g: 255, b: 255, a: 1 },
+            muted: { r: 95, g: 107, b: 133, a: 1 },
+        },
+        dark: {
+            primary: { r: 143, g: 176, b: 240, a: 1 },
+            ink: { r: 228, g: 234, b: 245, a: 1 },
+            card: { r: 24, g: 35, b: 58, a: 1 },
+            muted: { r: 168, g: 180, b: 201, a: 1 },
+            onPrimary: { r: 11, g: 21, b: 40, a: 1 },   // ink on periwinkle
+        },
+    };
+    RAMP.light.onPrimary = { r: 255, g: 255, b: 255, a: 1 };  // white on #3E6FD6
+    function paint() {
+        var app = document.querySelector('.stApp');
+        var root = document.documentElement;
+        if (!app) { return; }
+        var page = rgbOf(getComputedStyle(app).backgroundColor);
+        if (!page || page.a === 0) { return; }
+        var pageDark = page.r + page.g + page.b < 3 * 140;
+        var ramp = RAMP[pageDark ? 'dark' : 'light'];
+        // Cards lift off the page: white on the light canvas, slate on the
+        // dark one. If a theme ever matches the page exactly, keep the pair
+        // distinguishable by shifting the card instead of reusing the page.
+        var card = ramp.card;
+        if (luminanceDifference(card, page) < 1.15) {
+            card = pageDark
+                ? { r: Math.min(255, page.r + 10), g: Math.min(255, page.g + 10), b: Math.min(255, page.b + 12), a: 1 }
+                : { r: Math.max(0, page.r - 8), g: Math.max(0, page.g - 8), b: Math.max(0, page.b - 8), a: 1 };
+        }
+        var heading = document.querySelector('.stApp h1, .stApp h2, .stApp h3')
+            || document.querySelector('[data-testid="stMarkdownContainer"] p');
+        var text = heading ? getComputedStyle(heading).color : null;
+        // Primary: the resolved button fill, else the ramp's brand accent.
+        var button = document.querySelector('.stButton > button');
+        var primary = button ? rgbOf(getComputedStyle(button).backgroundColor) : null;
+        if (!primary || primary.a === 0) { primary = ramp.primary; }
+        // Secondary text: the live caption colour once one exists (the theme
+        // hydrates after first paint), otherwise the ramp's mid-grey.
+        var captionEl = document.querySelector('[data-testid="stCaptionContainer"] p');
+        var muted = captionEl ? rgbOf(getComputedStyle(captionEl).color) : ramp.muted;
+        if (muted && (muted.a === 0 || luminanceDifference(muted, card) < 2)) {
+            muted = ramp.muted;  // too close to its surface to read as secondary
+        }
+        function hex(c) {
+            return '#' + [c.r, c.g, c.b].map(function (v) {
+                return Math.round(v).toString(16).padStart(2, '0');
+            }).join('');
+        }
+        function set(name, c) {
+            if (c) { root.style.setProperty(name, hex(c)); }
+        }
+        set('--rp-surface', card);
+        set('--rp-canvas', page);
+        set('--rp-primary', primary);
+        set('--rp-ink', ramp.ink);   // blend-card top edge in dark mode
+        set('--rp-on-primary', ramp.onPrimary);
+        if (text) { root.style.setProperty('--rp-text', text); }
+        if (muted) { root.style.setProperty('--rp-muted', hex(muted)); }
+    }
+    // The theme's own stylesheets hydrate after first paint, so repaint on any
+    // attribute change; a paint with an unresolved surface is a no-op.
+    paint();
+    new MutationObserver(paint).observe(document.body, {
+        attributes: true, subtree: true, attributeFilter: ['class', 'style'],
+    });
+})();
+}
+</script>
+"""
+
+
 # ---------------------------------------------------------------------------
 # Page
 # ---------------------------------------------------------------------------
 st.markdown(CARD_CSS, unsafe_allow_html=True)
+st.html(THEME_TOKEN_BRIDGE, unsafe_allow_javascript=True)
 
 try:
     pipeline = get_pipeline()

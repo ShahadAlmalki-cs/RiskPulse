@@ -178,31 +178,31 @@ DECISION_BY_LEVEL = {
 # --- Recommendations -------------------------------------------------------
 _DECISION_ADVICE = {
     "Low": [
-        "Proceed with a standard credit decision and document the approval.",
-        "Offer the requested repayment schedule; no extra conditions required.",
+        "Proceed with the standard credit decision and document the approval.",
+        "Offer the requested repayment schedule; no additional conditions.",
         "Re-run the assessment if the loan amount or income changes.",
     ],
     "Medium": [
         "Route the file to a credit analyst before any commitment is made.",
         "Request proof of income (payslips or bank statements) for the last 3 months.",
-        "Consider a smaller loan amount or a shorter tenor to lower the ratio.",
-        "Add a guarantor or a higher first instalment to offset the risk.",
+        "Consider a smaller loan amount or a shorter tenor to lower the LTI ratio.",
+        "A guarantor or a higher first instalment can offset the risk.",
     ],
     "High": [
-        "Decline the current request or offer a supervised alternative.",
-        "Reduce exposure: a much smaller amount over a shorter tenor.",
+        "Decline the request as submitted, or offer a reduced alternative.",
+        "Reduce exposure: a smaller amount over a shorter tenor.",
         "Require full documentation and a co-signer before reconsidering.",
-        "If BNPL is the goal, restrict the applicant to low-value instalments.",
+        "If BNPL is the use case, limit the applicant to low-value instalments.",
     ],
 }
 
 _DRIVER_ADVICE = {
     "LTI": "The loan is large relative to income; a smaller amount or a longer "
-    "tenor would improve the score the most.",
-    "History": "A recorded prior default weighs heavily; only settlement history "
-    "and a co-signer can mitigate it.",
-    "Model": "The model sees a profile similar to past defaults; review income "
-    "stability, employment length and interest rate.",
+    "tenor reduces this signal.",
+    "History": "A recorded prior default contributes to the score; settlement "
+    "history and a co-signer are the available mitigants.",
+    "Model": "The application profile resembles historical defaults; review "
+    "income, employment length and credit history.",
 }
 
 

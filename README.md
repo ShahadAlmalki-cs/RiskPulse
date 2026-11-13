@@ -3,10 +3,11 @@
 **Pre-pricing, pre-approval credit risk screening.**
 
 RiskPulse scores a loan or buy-now-pay-later application using only the
-information available **before a rate is quoted and a decision is made**, and
-turns the estimate into a transparent recommendation: **approve**,
-**manual review** or **decline** — with the factors behind the score and the
-recommended next steps.
+information available **before a rate is quoted and a decision is made**. It
+combines a machine-learning default probability with a rule-based policy score
+and maps that score to one of three outcomes: **approve**, **manual review** or
+**decline**. The app shows the factors behind the score and the recommended next
+steps.
 
 This is an educational demonstrator built on a public credit dataset. It is not
 trained on, and does not represent, any real lender's customers.
@@ -23,9 +24,8 @@ The model is deliberately restricted to **application-time features**.
 | `loan_percent_income` (= `loan_amnt / person_income`, recomputed consistently everywhere) | `loan_int_rate` — set by the lender at pricing, i.e. **after** the moment in the process this product models |
 | | `loan_status` — the target; never a predictor |
 
-**Product definition:** a pre-pricing, pre-approval assessment. If you need a
-post-pricing model, the interest rate is a strong predictor and a different
-product scope.
+**Scope:** a pre-pricing, pre-approval assessment. A post-pricing model would be
+a different scope and could use the interest rate as a predictor.
 
 ## Model evaluation (hold-out test set, 6,483 applicants)
 
@@ -42,20 +42,19 @@ product scope.
 | Confusion matrix (TN/FP/FN/TP) | 4,959 / 106 / 644 / 774 |
 | Base rate | 21.8% of applicants default |
 
-**Read this correctly:** 78% of applicants repay, so accuracy alone is weak
-evidence — a majority-guesser already reaches 78%. The metrics that matter for
-a risk screener are **default recall (how many defaults are caught)**,
-**PR-AUC (ranking quality under class imbalance)** and the **Brier score
-(probability calibration)**. Precision/recall trade-off is set at the default
-0.5 threshold and was not tuned.
+**Reading the metrics:** 78% of applicants repay, so accuracy alone is not
+sufficient — a majority-class baseline already reaches that level. For a risk
+screener the more informative metrics are **default recall (share of defaults
+flagged)**, **PR-AUC (ranking quality under class imbalance)** and the **Brier
+score (probability calibration)**. The precision/recall trade-off is set at the
+default 0.5 threshold and was not tuned.
 
 **On calibration:** RandomForest probabilities are **not calibrated
 probabilities** — `predict_proba` returns a vote share across trees, not a
 frequency of default. The Brier score is *consistent with* imperfect
-calibration but does not by itself prove it (it also penalises
-misclassification); a reliability curve would be needed to characterise
-miscalibration properly. No calibration step (Platt scaling / isotonic
-regression) has been applied in this release.
+calibration but does not prove it (it also penalises misclassification); a
+reliability curve would be needed to describe the miscalibration. No calibration
+step (Platt scaling / isotonic regression) has been applied in this release.
 
 Training and inference share one fitted sklearn `Pipeline` (median imputation +
 one-hot encoding + RandomForest), so the preprocessing applied to an applicant
@@ -65,7 +64,7 @@ imputers and the encoder see training data only.
 
 ## The three layers of the decision
 
-RiskPulse produces **three distinct things**, which should not be confused:
+RiskPulse produces **three distinct outputs**, which should not be confused:
 
 1. **Model probability of default** — the RandomForest's raw output, clipped
    to the 2%–98% range. It is **not a calibrated probability** (see the note on
@@ -73,11 +72,11 @@ RiskPulse produces **three distinct things**, which should not be confused:
    metrics table above).
 2. **Blended risk score** — an **illustrative, manually weighted policy
    overlay**: `0.40 × model + 0.40 × LTI risk + 0.20 × prior default`. It
-   intentionally re-weights affordability and credit history, even though both
-   also enter the model, so it double-counts those factors. **It is not a model
+   intentionally re-weights affordability and credit history, although both also
+   enter the model, so those factors are counted twice. **It is not a model
    output, and none of the evaluation metrics apply to it.**
-3. **Recommendation** — a deterministic mapping from the blended score to
-   Approve / Manual review / Decline.
+3. **Recommendation** — a deterministic, rule-based mapping from the blended
+   score to Approve / Manual review / Decline.
 
 ## Decision policy (a policy choice, not an optimised threshold)
 
@@ -88,20 +87,20 @@ RiskPulse produces **three distinct things**, which should not be confused:
 | `> 35%` | High | Decline |
 
 The 40/40/20 weights and the 15%/35% bands are **documented policy choices, not
-statistically optimised thresholds**. They were not tuned against any loss
-function. Changing them changes the product's behaviour; treating them as
-empirically derived would be incorrect.
+statistically optimised thresholds**; they were not tuned against any loss
+function. Changing them changes the product's behaviour, and they should not be
+treated as empirically derived.
 
 **Why not just use the model probability?** On the hold-out test set, applying
 the same 15%/35% bands directly to the model probability would approve 58% of
 applicants and catch 82% of defaults, while this overlay approves fewer
 applicants and catches **92% of defaults** — at the cost of flagging roughly
 twice as many applicants who would have repaid (2,971 false flags vs. 1,540).
-Neither scheme is objectively correct; the choice is a business trade-off
-between missed defaults and reviewer workload. The overlay was chosen because
-it makes that trade-off explicit and tunable, but **it has not been validated
-against any cost model and a production deployment should choose a threshold
-from a measured cost/benefit curve, not from these numbers.**
+Neither scheme is objectively correct; the choice is a trade-off between missed
+defaults and reviewer workload. The overlay was chosen because it makes that
+trade-off explicit and adjustable, but **it has not been validated against any
+cost model. A production deployment should choose a threshold from a measured
+cost/benefit curve, not from these numbers.**
 
 ## Project structure
 
@@ -136,7 +135,7 @@ RiskPulse/
 
 **Design principle:** `app.py` is a presentation layer. All calculation lives
 in `src/`, and all learned preprocessing lives inside the persisted pipeline,
-so training and inference cannot drift apart.
+so training and inference use the same transformations.
 
 ## Getting started
 
@@ -178,24 +177,23 @@ it on the held-out test set.
 python -m pytest tests -q
 ```
 
-21 tests cover: schema/order compatibility, absence of post-pricing features,
+The tests cover: schema/order compatibility, absence of post-pricing features,
 target exclusion, LTI recomputation, duplicate removal, unknown-category
 rejection, missing-value imputation, invalid numeric inputs, probability
 validity, and the decision logic boundaries.
 
 ## Known limitations
 
-- **Dataset** — a public lending dataset, not BNPL transactions and not
+- **Dataset** — a public personal-loan dataset, not BNPL transactions, and not
   representative of any specific market or lender.
 - **Thresholds** — the decision bands are policy choices, not optimised.
 - **Recall** — the model misses ~45% of defaults at the default threshold; a
-  production system would tune this explicitly against a documented cost
-  asymmetry.
-- **UI** — known cosmetic clipping in the benchmark cards at narrow widths.
-- **No persistence** — assessment history is session-only.
-- **Not production-ready** — no authentication, no audit trail, no monitoring.
-  Do not use for real lending decisions without calibration, fairness testing
-  and regulatory review.
+  production system would tune this against a documented cost asymmetry.
+- **UI** — cosmetic clipping in the benchmark cards at narrow widths.
+- **No persistence** — assessment history is stored for the session only.
+- **Not production-ready** — no authentication, audit trail or monitoring. Do
+  not use for real lending decisions without calibration, fairness testing and
+  regulatory review.
 
 ## Disclaimer
 

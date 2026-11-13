@@ -59,14 +59,18 @@ dataframeBorderColor = "#DDE4F4"
 dataframeHeaderBackgroundColor = "#F6F8FE"
 dataframeHeaderTextColor = "#0B1528"
 
+# Dark mode, tuned for long sessions: four near-black slate steps give the
+# page, cards and inputs depth without any bright surface, and secondary text
+# is lifted to #A8B4C9 so labels and captions stay legible on the cards.
+# Logo accent colours (primary, green/amber/coral status) are unchanged.
 [theme.dark]
 primaryColor = "#8FB0F0"
-backgroundColor = "#0B1528"
-secondaryBackgroundColor = "#101D33"
-codeBackgroundColor = "#13223B"
-textColor = "#E8EDF7"
-linkColor = "#8FB0F0"
-borderColor = "#1E2C47"
+backgroundColor = "#111A2B"
+secondaryBackgroundColor = "#18233A"
+codeBackgroundColor = "#141F35"
+textColor = "#E4EAF5"
+linkColor = "#9DBBF2"
+borderColor = "#2A3A58"
 codeTextColor = "#C4D0E4"
 greenColor = "#5BD0A2"
 redColor = "#F6866E"
@@ -74,13 +78,27 @@ yellowColor = "#E8B75A"
 orangeColor = "#F2A16B"
 blueColor = "#8FB0F0"
 violetColor = "#9FA9F5"
-grayColor = "#93A1BA"
+grayColor = "#A8B4C9"
+grayBackgroundColor = "#1F2C46"
+greenBackgroundColor = "#142E2C"
+redBackgroundColor = "#34202B"
+yellowBackgroundColor = "#312A1C"
+orangeBackgroundColor = "#332619"
+blueBackgroundColor = "#1B2A47"
+violetBackgroundColor = "#24263F"
+greenTextColor = "#5BD0A2"
+redTextColor = "#F6866E"
+yellowTextColor = "#E8B75A"
+orangeTextColor = "#F2A16B"
+blueTextColor = "#8FB0F0"
+violetTextColor = "#9FA9F5"
+grayTextColor = "#A8B4C9"
 chartCategoricalColors = ["#8FB0F0", "#7FA3EE", "#E8EDF7", "#F6866E", "#5BD0A2", "#E8B75A"]
 chartSequentialColors = [
-    "#0B1528",
-    "#13223B",
-    "#1B2F50",
-    "#24406B",
+    "#111A2B",
+    "#18233A",
+    "#1F2C46",
+    "#27395C",
     "#31548A",
     "#416EA9",
     "#5A87E4",
@@ -88,9 +106,9 @@ chartSequentialColors = [
     "#A9C6F3",
     "#E3EBFB",
 ]
-dataframeBorderColor = "#1E2C47"
-dataframeHeaderBackgroundColor = "#0F1B2F"
-dataframeHeaderTextColor = "#E8EDF7"
+dataframeBorderColor = "#2A3A58"
+dataframeHeaderBackgroundColor = "#1B2740"
+dataframeHeaderTextColor = "#E4EAF5"
 
 [theme.sidebar]
 paddingTop = "1rem"
@@ -106,11 +124,14 @@ primaryColor = "#3E6FD6"
 linkColor = "#2F5FC4"
 
 [theme.dark.sidebar]
-backgroundColor = "#080F1E"
-secondaryBackgroundColor = "#101D33"
-codeBackgroundColor = "#13223B"
-textColor = "#E8EDF7"
-borderColor = "#1E2C47"
+backgroundColor = "#131D30"
+secondaryBackgroundColor = "#18233A"
+codeBackgroundColor = "#141F35"
+textColor = "#E4EAF5"
+borderColor = "#2A3A58"
 primaryColor = "#8FB0F0"
-linkColor = "#8FB0F0"
+linkColor = "#9DBBF2"
+grayTextColor = "#A8B4C9"
+
+
 
