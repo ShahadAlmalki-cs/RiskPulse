@@ -40,3 +40,10 @@ desktop.ini
 # models/ is committed so the app runs without retraining.
 # Uncomment the next line if you prefer to ship only code:
 # models/*.pkl
+
+# --- Logs and test output ---
+*.log
+*.mjs
+_*.png
+_*.py
+_*.mjs

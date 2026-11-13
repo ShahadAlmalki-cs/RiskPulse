@@ -1,202 +1,261 @@
-# RiskPulse
+# RiskPulse — Pre-Pricing Credit Risk Assessment Dashboard
 
-**Pre-pricing, pre-approval credit risk screening.**
+RiskPulse is a credit risk screening dashboard designed to evaluate loan and Buy Now, Pay Later (BNPL) applications at pre-approval time—**before an interest rate is quoted or an approval decision is finalized**.
 
-RiskPulse scores a loan or buy-now-pay-later application using only the
-information available **before a rate is quoted and a decision is made**. It
-combines a machine-learning default probability with a rule-based policy score
-and maps that score to one of three outcomes: **approve**, **manual review** or
-**decline**. The app shows the factors behind the score and the recommended next
-steps.
+The application combines a supervised machine learning model (Random Forest) trained on application-time applicant features with an explicit, rule-based policy overlay to produce an auditable recommendation: **Approve**, **Manual Review**, or **Decline**.
 
-This is an educational demonstrator built on a public credit dataset. It is not
-trained on, and does not represent, any real lender's customers.
+> **Educational & Demonstration Notice:** RiskPulse is an educational demonstrator trained on a public personal-loan dataset. It is **not** trained on Tamara's internal data, actual commercial BNPL transaction records, or any private lender's customer portfolio. It is not intended for real-world automated credit decisions without calibration, fairness audits, and regulatory review.
 
 ---
 
-## Scope: what the model does and does not use
+## Key Capabilities
 
-The model is deliberately restricted to **application-time features**.
+- **Application-Time Screening:** Restricted exclusively to features available when an applicant applies (age, income, employment duration, home ownership, credit history length, prior default, requested amount, and loan purpose). Post-decision variables such as lender-assigned loan grades and quoted interest rates are strictly excluded.
+- **Dual-Signal Architecture:** Clear architectural separation between the machine learning model's default probability estimate and the rule-based policy score.
+- **Auditable Policy Overlay:** A transparent, deterministic 40/40/20 weighted blend combining the model's clipped probability, a continuous loan-to-income (LTI) risk curve, and past default records.
+- **Transparent Decisioning:** Deterministic mapping to Approve (< 15%), Manual Review (15%–35%), or Decline (> 35%), accompanied by risk driver identification and actionable next steps.
+- **Empirical Model Evaluation:** Evaluated on a hold-out test set (6,483 applicants) across class-imbalance metrics: PR-AUC, default recall, ROC AUC, and Brier score.
+- **Dual-Theme Dashboard:** High-contrast Streamlit interface supporting light and dark modes with WCAG AA-compliant contrast ratios.
 
-| Used | Excluded (and why) |
-|---|---|
-| Age, income, employment length, home ownership, credit history length, prior default on file, loan amount, loan purpose | `loan_grade` — a post-decision pricing label assigned by the lender; 98% predictable from the interest rate |
-| `loan_percent_income` (= `loan_amnt / person_income`, recomputed consistently everywhere) | `loan_int_rate` — set by the lender at pricing, i.e. **after** the moment in the process this product models |
-| | `loan_status` — the target; never a predictor |
+---
 
-**Scope:** a pre-pricing, pre-approval assessment. A post-pricing model would be
-a different scope and could use the interest rate as a predictor.
+## Technology Stack
 
-## Model evaluation (hold-out test set, 6,483 applicants)
+| Layer | Technologies |
+| --- | --- |
+| **Language & Runtime** | Python 3.10+ (tested on Python 3.12) |
+| **Machine Learning** | scikit-learn (RandomForestClassifier, Pipeline, ColumnTransformer) |
+| **Data Processing** | pandas, NumPy |
+| **Artifact Persistence** | joblib, JSON |
+| **User Interface** | Streamlit, Apache ECharts (streamlit-echarts) |
+| **Testing & QA** | pytest, Playwright / Patchright (headless browser QA) |
 
-| Metric | Value |
-|---|---|
-| Accuracy | 88.4% |
-| Precision | 87.9% |
-| Recall (default class) | 54.6% |
-| F1 | 67.4% |
-| ROC AUC | 0.869 |
-| PR AUC | 0.774 |
-| Brier score | 0.092 |
-| Default recall | 54.6% |
-| Confusion matrix (TN/FP/FN/TP) | 4,959 / 106 / 644 / 774 |
-| Base rate | 21.8% of applicants default |
+---
 
-**Reading the metrics:** 78% of applicants repay, so accuracy alone is not
-sufficient — a majority-class baseline already reaches that level. For a risk
-screener the more informative metrics are **default recall (share of defaults
-flagged)**, **PR-AUC (ranking quality under class imbalance)** and the **Brier
-score (probability calibration)**. The precision/recall trade-off is set at the
-default 0.5 threshold and was not tuned.
+## Architecture & Project Structure
 
-**On calibration:** RandomForest probabilities are **not calibrated
-probabilities** — `predict_proba` returns a vote share across trees, not a
-frequency of default. The Brier score is *consistent with* imperfect
-calibration but does not prove it (it also penalises misclassification); a
-reliability curve would be needed to describe the miscalibration. No calibration
-step (Platt scaling / isotonic regression) has been applied in this release.
-
-Training and inference share one fitted sklearn `Pipeline` (median imputation +
-one-hot encoding + RandomForest), so the preprocessing applied to an applicant
-in the app is exactly the preprocessing the model was trained on. Deduplication
-and the train/test split both happen before any preprocessing is fitted;
-imputers and the encoder see training data only.
-
-## The three layers of the decision
-
-RiskPulse produces **three distinct outputs**, which should not be confused:
-
-1. **Model probability of default** — the RandomForest's raw output, clipped
-   to the 2%–98% range. It is **not a calibrated probability** (see the note on
-   calibration above). This is the only statistically evaluated quantity (the
-   metrics table above).
-2. **Blended risk score** — an **illustrative, manually weighted policy
-   overlay**: `0.40 × model + 0.40 × LTI risk + 0.20 × prior default`. It
-   intentionally re-weights affordability and credit history, although both also
-   enter the model, so those factors are counted twice. **It is not a model
-   output, and none of the evaluation metrics apply to it.**
-3. **Recommendation** — a deterministic, rule-based mapping from the blended
-   score to Approve / Manual review / Decline.
-
-## Decision policy (a policy choice, not an optimised threshold)
-
-| Blended score | Level | Recommendation |
-|---|---|---|
-| `< 15%` | Low | Approve |
-| `15% – 35%` | Medium | Manual review |
-| `> 35%` | High | Decline |
-
-The 40/40/20 weights and the 15%/35% bands are **documented policy choices, not
-statistically optimised thresholds**; they were not tuned against any loss
-function. Changing them changes the product's behaviour, and they should not be
-treated as empirically derived.
-
-**Why not just use the model probability?** On the hold-out test set, applying
-the same 15%/35% bands directly to the model probability would approve 58% of
-applicants and catch 82% of defaults, while this overlay approves fewer
-applicants and catches **92% of defaults** — at the cost of flagging roughly
-twice as many applicants who would have repaid (2,971 false flags vs. 1,540).
-Neither scheme is objectively correct; the choice is a trade-off between missed
-defaults and reviewer workload. The overlay was chosen because it makes that
-trade-off explicit and adjustable, but **it has not been validated against any
-cost model. A production deployment should choose a threshold from a measured
-cost/benefit curve, not from these numbers.**
-
-## Project structure
+RiskPulse follows a strict separation of concerns: `app.py` acts solely as a presentation layer, while all risk logic, feature validation, and persistence live in `src/`. Learned transformations are encapsulated inside the persisted scikit-learn pipeline, ensuring training and inference preprocessing never diverge.
 
 ```
 RiskPulse/
-├── app.py                  # Streamlit entry point — the dashboard UI only
-├── train_model.py          # Builds the pipeline, trains, evaluates, persists artifacts
-├── requirements.txt
-├── requirements-dev.txt    # pytest (development only)
-├── tests/
-│   └── test_model_validity.py   # 21 tests: schema, leakage regression, validation
+├── app.py                      # Streamlit presentation dashboard
+├── train_model.py              # End-to-end training and evaluation pipeline
+├── requirements.txt            # Runtime dependencies
+├── requirements-dev.txt        # Development and testing dependencies
+├── .gitignore                  # Git ignore rules for Python, logs, and artifacts
 ├── .streamlit/
-│   └── config.toml         # Brand theme (light + dark), dense KPI layout
-├── models/                 # Generated artifacts (committed for convenience)
-│   ├── risk_pipeline.pkl   # Pipeline(imputer + encoder + RandomForest)
-│   ├── feature_schema.json # Feature names, order, categories, missing policy
-│   ├── metrics.json        # Hold-out evaluation report
-│   └── backup_pre_setc/    # Previous (post-pricing) model, kept for reference
+│   └── config.toml             # Theme configuration (light & dark palettes)
+├── src/
+│   ├── __init__.py
+│   ├── config.py               # Paths, feature schemas, blend weights, thresholds
+│   ├── features.py             # Input validation and raw model frame assembly
+│   ├── risk.py                 # Risk calculations, signal blending, and decision rules
+│   ├── data_prep.py            # Row-level cleaning, deduplication, and LTI recomputation
+│   └── artifacts.py            # Loaders for pipeline, schema, metrics, and profiles
+├── models/
+│   ├── risk_pipeline.pkl       # Fitted Pipeline (imputer + one-hot encoder + RandomForest)
+│   ├── feature_schema.json     # Feature names, categories, and preprocessing contract
+│   ├── metrics.json            # Verified hold-out test set evaluation report
+│   └── backup_pre_setc/        # Reference model artifacts from earlier iterations
 ├── data/
-│   ├── credit_risk_dataset.csv   # Raw dataset
-│   └── reference_profiles.csv    # Deduplicated historical portfolio for the app
+│   ├── credit_risk_dataset.csv # Raw credit risk dataset
+│   ├── reference_profiles.csv  # Deduplicated historical dataset for portfolio benchmarking
+│   └── clean_credit_risk.csv   # Cleaned dataset copy
 ├── notebooks/
-│   ├── inspect_data.py     # Quick profile of the raw data
-│   └── clean_data.py       # Rebuilds data/reference_profiles.csv
-└── src/
-    ├── config.py           # Paths, feature schema, weights, thresholds
-    ├── risk.py             # Risk math, blending, decision policy, advice
-    ├── features.py         # Input validation + model frame assembly
-    ├── artifacts.py        # Pipeline / metrics / reference loaders
-    └── data_prep.py        # Row-level cleaning (no learned transforms)
+│   ├── inspect_data.py         # Summary profiling script for the raw dataset
+│   └── clean_data.py           # Rebuilds reference profiles from raw data
+└── tests/
+    ├── test_model_validity.py  # Pipeline integrity, schema compatibility, boundary tests
+    ├── test_stale_flow.py      # Input validation, UI state flow, and zero-income guards
+    └── test_theme_contrast.py  # WCAG AA contrast regression suite for light and dark modes
 ```
 
-**Design principle:** `app.py` is a presentation layer. All calculation lives
-in `src/`, and all learned preprocessing lives inside the persisted pipeline,
-so training and inference use the same transformations.
+---
 
-## Getting started
+## Dataset Description & Preprocessing
+
+The model is trained on a public personal-loan credit risk dataset containing applicant demographics, credit bureau variables, and loan characteristics.
+
+### Preprocessing & Data Hygiene (`src/data_prep.py`)
+
+1. **Age Filtering:** Outlier and erroneous records outside the range of 18 to 100 years are excluded.
+2. **Deduplication:** Duplicate applicant records are removed prior to splitting.
+3. **LTI Recomputation:** Loan-to-income (`loan_percent_income = loan_amnt / person_income`) is recomputed directly from raw values to resolve data entry inconsistencies in the source data.
+4. **Train / Test Split:** A stratified 80/20 split (`random_state=42`) is performed **before** fitting any imputers or encoders to prevent data leakage.
+5. **In-Pipeline Imputation & Encoding:**
+   - Missing numeric values: Median imputation fitted on training data only.
+   - Missing categorical values: Mode (`most_frequent`) imputation fitted on training data only.
+   - Categorical encoding: `OneHotEncoder` with strict known categories and `handle_unknown="error"`.
+
+### Feature Schema
+
+| Feature Name | Type | Description |
+| --- | --- | --- |
+| `person_age` | Numeric | Applicant age in years (18–100) |
+| `person_income` | Numeric | Annual gross income in USD |
+| `person_emp_length` | Numeric | Employment length in years |
+| `person_home_ownership` | Categorical | Housing status: `RENT`, `MORTGAGE`, `OWN`, `OTHER` |
+| `loan_amnt` | Numeric | Requested loan amount in USD |
+| `loan_intent` | Categorical | Purpose: `PERSONAL`, `EDUCATION`, `MEDICAL`, `VENTURE`, `HOMEIMPROVEMENT`, `DEBTCONSOLIDATION` |
+| `loan_percent_income` | Numeric | Derived ratio: `loan_amnt / person_income` |
+| `cb_person_default_on_file` | Categorical | Bureau record of historical default: `Y` / `N` |
+| `cb_person_cred_hist_length` | Numeric | Length of credit history in years |
+
+**Target Variable:** `loan_status` (Binary: `0` = non-default / repaid, `1` = default). Base default rate is 21.87%.
+
+### Explicitly Excluded Features
+
+- `loan_grade`: A post-decision credit grade assigned by the lender, which is 98% collinear with the quoted interest rate.
+- `loan_int_rate`: The interest rate quoted by the lender at pricing, i.e., after pre-approval screening.
+- `loan_status`: The ground-truth target variable.
+
+---
+
+## Model Evaluation & Performance
+
+The classifier is a `RandomForestClassifier` (100 estimators, default parameters, `random_state=42`) evaluated on a held-out test split of 6,483 applicants.
+
+### Hold-Out Test Metrics (`models/metrics.json`)
+
+| Metric | Verified Value | Interpretation |
+| --- | --- | --- |
+| **Accuracy** | **88.43%** | Overall correct rate. In an unbalanced dataset (78.13% non-default), accuracy alone is misleading; a naive majority-class classifier reaches 78.13%. |
+| **Precision** | **87.95%** | When the model predicts default, it is correct ~88% of the time. |
+| **Recall (Default Class)** | **54.58%** | Proportion of actual defaulting borrowers captured at the standard 0.5 decision threshold. |
+| **F1 Score** | **67.36%** | Harmonic mean of precision and recall for the default class. |
+| **ROC AUC** | **0.8687** | Discrimination ability across all classification thresholds. |
+| **PR-AUC (Average Precision)** | **0.7738** | Primary ranking quality metric under class imbalance (baseline = 0.2187). |
+| **Brier Score** | **0.0918** | Mean squared probability error (lower is better). |
+| **Test Set Size** | **6,483** | 5,065 non-defaults (`0`) and 1,418 defaults (`1`). |
+
+### Confusion Matrix (Test Split)
+
+- **TN / FP / FN / TP:** `4,959 / 106 / 644 / 774`
+
+| | Predicted Non-Default | Predicted Default |
+| --- | --- | --- |
+| **Actual Non-Default (`0`)** | 4,959 (TN) | 106 (FP) |
+| **Actual Default (`1`)** | 644 (FN) | 774 (TP) |
+
+### Note on Probability Calibration
+
+Random Forest probability outputs (`predict_proba`) represent tree ensemble vote shares and are **not calibrated** probabilities. The model outputs are bounded to `[0.02, 0.98]` as a guardrail. No post-hoc calibration technique (such as Platt scaling or isotonic regression) has been applied in this release.
+
+---
+
+## Decision Architecture: Model Probability vs. Policy Risk Score
+
+RiskPulse distinguishes between statistical estimates and credit policy decisions:
+
+```
+[ Applicant Inputs ]
+         │
+         ├──► [ scikit-learn Pipeline ] ────► Model Default Probability (2% – 98%) [Weight: 40%]
+         │
+         ├──► [ LTI Calculation ]       ────► LTI Risk Curve (0% – 100%)         [Weight: 40%] ──► Blended Score ──► Decision Rule
+         │
+         └──► [ Bureau Default Check ]  ────► History Flag (0% or 100%)          [Weight: 20%]
+```
+
+1. **Model Default Probability:** The raw tree vote share from the Random Forest model, clipped to `[0.02, 0.98]`. This is the sole statistically trained and evaluated metric.
+2. **Blended Risk Score (Policy Overlay):** An illustrative, rule-based screening score combining three factors:
+   $$\text{Blended Score} = 0.40 \times P(\text{Default}) + 0.40 \times \text{Risk}_{\text{LTI}} + 0.20 \times \text{Flag}_{\text{Default}}$$
+   - $\text{Risk}_{\text{LTI}} = 1 - \exp\left(-\frac{\text{LTI}}{0.35}\right)$: A continuous saturating function that penalizes excessive loan-to-income ratios.
+   - $\text{Flag}_{\text{Default}} \in \{0.0, 1.0\}$: Binary indicator of past credit default on file.
+   - *Design note:* LTI and prior default are already features within the Random Forest model. The blended score intentionally re-weights them to enforce underwriting policy priorities (affordability and repayment history). It is an illustrative policy overlay, not an independent statistical model.
+3. **Recommendation:** A deterministic mapping from the blended score to an underwriting action:
+
+| Blended Risk Score | Risk Level | Policy Decision | Operational Action |
+| --- | --- | --- | --- |
+| `< 15.0%` | **Low** | **Approve** | Eligible for automated standard approval. |
+| `15.0% – 35.0%` | **Medium** | **Manual Review** | Route to credit analyst; verify income and bank statements. |
+| `> 35.0%` | **High** | **Decline** | Request outside policy; suggest smaller amount, shorter tenor, or guarantor. |
+
+---
+
+## Installation & Setup
+
+### Prerequisites
+
+- Python 3.10, 3.11, or 3.12 (developed and verified on Python 3.12)
+- Git
+
+### 1. Clone the Repository
 
 ```bash
-# 1. Clone and enter the project
-git clone <your-repo-url>
+git clone https://github.com/<your-username>/RiskPulse.git
 cd RiskPulse
+```
 
-# 2. Create an isolated environment
+### 2. Set Up a Virtual Environment
+
+```bash
+# macOS / Linux
+python3 -m venv venv
+source venv/bin/activate
+
+# Windows (PowerShell)
 python -m venv venv
-venv\Scripts\activate        # Windows
-# source venv/bin/activate   # macOS / Linux
+venv\Scripts\Activate.ps1
+```
 
-# 3. Install dependencies
+### 3. Install Dependencies
+
+```bash
+pip install --upgrade pip
 pip install -r requirements.txt
-pip install -r requirements-dev.txt   # optional, for the test suite
 
-# 4. Run the dashboard
+# Optional: Install development and test dependencies
+pip install -r requirements-dev.txt
+```
+
+---
+
+## Running the Application
+
+Pre-trained model artifacts are included in `models/`, allowing immediate execution without a retraining step:
+
+```bash
 streamlit run app.py
 ```
 
-The app opens at <http://localhost:8501>. Trained artifacts in `models/` are
-committed, so no training step is needed to start.
+Once started, navigate to `http://localhost:8501` in your browser.
 
-## Retraining
+### Re-training the Model (Optional)
+
+To retrain the Random Forest pipeline and regenerate `models/risk_pipeline.pkl`, `models/feature_schema.json`, and `models/metrics.json`:
 
 ```bash
-python train_model.py          # rebuilds risk_pipeline.pkl, feature_schema.json, metrics.json
+python train_model.py
 ```
 
-`train_model.py` deduplicates the raw data, recomputes loan-to-income, does a
-stratified 80/20 split (`random_state=42`) **before** fitting any
-preprocessing, then fits a single pipeline on the training split and evaluates
-it on the held-out test set.
+---
 
-## Tests
+## Running the Test Suite
+
+The test suite consists of 47 automated tests covering input validation, pipeline schema adherence, risk blend calculations, stale session detection, and UI theme contrast:
 
 ```bash
 python -m pytest tests -q
 ```
 
-The tests cover: schema/order compatibility, absence of post-pricing features,
-target exclusion, LTI recomputation, duplicate removal, unknown-category
-rejection, missing-value imputation, invalid numeric inputs, probability
-validity, and the decision logic boundaries.
+### Test Scope
 
-## Known limitations
+- **`tests/test_model_validity.py` (22 tests):** Verifies feature order, exclusion of post-pricing features (`loan_grade`, `loan_int_rate`), LTI calculation, unknown-category handling, missing-value imputation, decision thresholds, and advice generation.
+- **`tests/test_stale_flow.py` (21 tests):** Verifies input validation (zero/negative income rejection, age bounds), fingerprint change detection, and UI session state management.
+- **`tests/test_theme_contrast.py` (4 tests):** Validates WCAG AA contrast compliance across all foreground/background color combinations in both light and dark mode palettes.
 
-- **Dataset** — a public personal-loan dataset, not BNPL transactions, and not
-  representative of any specific market or lender.
-- **Thresholds** — the decision bands are policy choices, not optimised.
-- **Recall** — the model misses ~45% of defaults at the default threshold; a
-  production system would tune this against a documented cost asymmetry.
-- **UI** — cosmetic clipping in the benchmark cards at narrow widths.
-- **No persistence** — assessment history is stored for the session only.
-- **Not production-ready** — no authentication, audit trail or monitoring. Do
-  not use for real lending decisions without calibration, fairness testing and
-  regulatory review.
+---
+
+## Known Limitations
+
+- **Dataset Origin:** The model is trained on an open-source personal loan dataset. It does not reflect BNPL micro-instalment behaviors, specific merchant risk categories, or regional economic conditions.
+- **Uncalibrated Probabilities:** Output probabilities reflect tree ensemble vote distributions and have not undergone isotonic calibration.
+- **Policy Weights:** The 40/40/20 weights and 15%/35% decision bands represent illustrative underwriting heuristics rather than mathematically loss-optimized business boundaries.
+- **Session-Only Storage:** Assessment history is stored in Streamlit session memory and resets when the browser session ends.
+
+---
 
 ## Disclaimer
 
-RiskPulse is an educational credit-risk demonstrator trained on a public
-credit dataset. Do not use it for real lending decisions without calibration,
-fairness testing and regulatory review.
+RiskPulse is an academic and portfolio demonstrator developed for educational purposes in machine learning and credit risk engineering. It is not licensed lending software, does not constitute financial advice, and should never be used as the sole decision mechanism in commercial lending operations without extensive domain adaptation, bias/fairness auditing, and regulatory compliance validation.

@@ -17,19 +17,19 @@ from src.data_prep import load_raw_data  # noqa: E402
 def main() -> None:
     df = load_raw_data()
 
-    print("أول 5 أسطر من البيانات:")
+    print("First 5 rows:")
     print(df.head())
 
-    print("\nحجم البيانات (الصفوف، الأعمدة):")
+    print("\nDataset shape (rows, columns):")
     print(df.shape)
 
-    print("\nمعلومات الأعمدة وأنواع البيانات:")
+    print("\nColumn info and data types:")
     df.info()
 
-    print("\nعدد القيم المفقودة في كل عمود:")
+    print("\nMissing values per column:")
     print(df.isnull().sum())
 
-    print("\nملخص إحصائي للأعمدة الرقمية:")
+    print("\nSummary statistics for numeric columns:")
     print(df.describe())
 
 
